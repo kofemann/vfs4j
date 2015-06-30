@@ -17,35 +17,54 @@ import org.dcache.nfs.vfs.FsStat;
 import org.dcache.nfs.vfs.Inode;
 import org.dcache.nfs.vfs.Stat;
 import org.dcache.nfs.vfs.VirtualFileSystem;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  */
 public class LocalVFS implements VirtualFileSystem {
 
-    // stolen from /usr/include/bits/fcntl-linux.h
+    private final Logger LOG = LoggerFactory.getLogger(LocalVFS.class);
 
+    // stolen from /usr/include/bits/fcntl-linux.h
     private final static int O_DIRECTORY = 0200000;
     private final static int O_RDONLY = 00;
+    private final static int O_PATH = 010000000;
 
     private final static int AT_EMPTY_PATH = 0x1000;
-
 
     private final static int MAX_HANDLE_SIZE = 48;
     private final static int MIN_HANDLE_SIZE = 4;
 
     private final static int NONE = 0;
 
-    private final File root;
     private final SysVfs sysVfs;
     private final jnr.ffi.Runtime runtime;
 
-    public LocalVFS(File root) {
+    private final File root;
+    private final KernelFileHandle rootFh;
+    private final int rootFd;
+    private final int mountId;
+
+    public LocalVFS(File root) throws IOException {
         this.root = root;
 
         sysVfs = FFIProvider.getSystemProvider()
                 .createLibraryLoader(SysVfs.class)
                 .load("c");
         runtime = jnr.ffi.Runtime.getRuntime(sysVfs);
+
+        rootFd = sysVfs.open(root.getAbsolutePath(), O_RDONLY | O_DIRECTORY, NONE);
+        checkError(rootFd);
+        rootFh = new KernelFileHandle(runtime);
+        rootFh.handleBytes.set(MAX_HANDLE_SIZE);
+
+        int[] mntId = new int[1];
+        int len = sysVfs.name_to_handle_at(rootFd, "", rootFh, mntId, AT_EMPTY_PATH);
+        checkError(len);
+        mountId = mntId[0];
+
+        LOG.debug("handle  =  {}, mountid = {}", rootFh, mntId[0]);
 
     }
 
@@ -66,13 +85,16 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public Inode getRootInode() throws IOException {
-        __getRootInode();
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        return toInode(rootFh);
     }
 
     @Override
     public Inode lookup(Inode parent, String path) throws IOException {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+
+        KernelFileHandle fh = toKernelFh(parent);
+        int fd = sysVfs.open_by_handle_at(mountId, fh, O_PATH);
+        checkError(fd);
+        return null;
     }
 
     @Override
@@ -169,32 +191,59 @@ public class LocalVFS implements VirtualFileSystem {
         return sysVfs.strerror(runtime.getLastError());
     }
 
+    /**
+     * Lookup file handle by path
+     * @param fd parent directory open file descriptor
+     * @param path path within a directory
+     * @param flags ...
+     * @return file handle
+     * @throws IOException
+     */
+    private KernelFileHandle path2fh(int fd, String path, int flags) throws IOException {
 
+        KernelFileHandle fh = new KernelFileHandle(runtime);
+        fh.handleBytes.set(MAX_HANDLE_SIZE);
 
-    private void fd_to_fh(int fd) throws IOException {
-
-        byte[] fh = new byte[512];
         int[] mntId = new int[1];
-        int len = sysVfs.name_to_handle_at(fd, "", fh, mntId, AT_EMPTY_PATH);
+        int len = sysVfs.name_to_handle_at(fd, path, fh, mntId, flags);
         checkError(len);
-        System.out.println("handle len = " + len);
-    }
-
-    private int __getRootInode() throws IOException {
-        int fd = sysVfs.open(root.getAbsolutePath(), O_RDONLY | O_DIRECTORY, NONE);
-        checkError(fd);
-        fd_to_fh(fd);
-        return fd;
+        LOG.debug("handle  =  {}", fh);
+        return fh;
     }
 
     private void checkError(int error) throws IOException {
         if (error < 0) {
+            LOG.warn("Last error({}} : {}", error, getError());
             throw new IOException(getError());
         }
     }
+
+    private KernelFileHandle toKernelFh(Inode inode) {
+        byte[] data = inode.getFileId();
+        KernelFileHandle fh = new KernelFileHandle(runtime);
+        fh.handleType.set(rootFh.handleType.intValue());
+        fh.handleBytes.set(data.length);
+        for(int i = 0; i < data.length; i++) {
+            fh.handleData[i].set(data[i]);
+        }
+        return fh;
+    }
+
+    private Inode toInode(KernelFileHandle fh) {
+        byte[] data = new byte[fh.handleBytes.intValue()];
+        for (int i = 0; i < data.length; i++) {
+            data[i] = fh.handleData[i].get();
+        }
+        return Inode.forFile(data);
+    }
+
     public interface SysVfs {
+
         String strerror(int e);
+
         int open(CharSequence path, int flags, int mode);
-        int name_to_handle_at(int fd, CharSequence name, @Out byte[] kernel_fh, @Out int[] mntId, int flag);
+
+        int name_to_handle_at(int fd, CharSequence name, @Out @In KernelFileHandle fh, @Out int[] mntId, int flag);
+        int open_by_handle_at(int mount_fd, @In KernelFileHandle fh, int flags);
     }
 }

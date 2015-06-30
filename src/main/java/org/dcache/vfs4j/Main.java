@@ -1,22 +1,15 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package org.dcache.vfs4j;
 
 import java.io.File;
 import java.io.IOException;
 
-/**
- *
- * @author tigran
- */
 public class Main {
 
+    // sudo java -Dorg.slf4j.simpleLogger.defaultLogLevel=debug -jar target/vfs4j-1.0-SNAPSHOT-jar-with-dependencies.jar
     public static void main(String args[]) throws IOException {
 
         LocalVFS vfs = new LocalVFS(new File("/tmp"));
+        vfs.lookup(vfs.getRootInode(), "aa");
         System.out.println(vfs.getRootInode());
 
     }
