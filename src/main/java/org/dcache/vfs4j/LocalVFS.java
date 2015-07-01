@@ -8,6 +8,9 @@ import javax.security.auth.Subject;
 import jnr.ffi.provider.FFIProvider;
 import jnr.constants.platform.Errno;
 import jnr.ffi.annotations.*;
+import org.dcache.nfs.status.NfsIoException;
+import org.dcache.nfs.status.NoEntException;
+import org.dcache.nfs.status.ServerFaultException;
 
 import org.dcache.nfs.v4.NfsIdMapping;
 import org.dcache.nfs.v4.xdr.nfsace4;
@@ -55,13 +58,13 @@ public class LocalVFS implements VirtualFileSystem {
         runtime = jnr.ffi.Runtime.getRuntime(sysVfs);
 
         rootFd = sysVfs.open(root.getAbsolutePath(), O_RDONLY | O_DIRECTORY, NONE);
-        checkError(rootFd);
+        checkError(rootFd >= 0);
         rootFh = new KernelFileHandle(runtime);
         rootFh.handleBytes.set(MAX_HANDLE_SIZE);
 
         int[] mntId = new int[1];
-        int len = sysVfs.name_to_handle_at(rootFd, "", rootFh, mntId, AT_EMPTY_PATH);
-        checkError(len);
+        int rc = sysVfs.name_to_handle_at(rootFd, "", rootFh, mntId, AT_EMPTY_PATH);
+        checkError(rc == 0);
         mountId = mntId[0];
 
         LOG.debug("handle  =  {}, mountid = {}", rootFh, mountId);
@@ -93,7 +96,7 @@ public class LocalVFS implements VirtualFileSystem {
 
         KernelFileHandle fh = toKernelFh(parent);
         int fd = sysVfs.open_by_handle_at(rootFd, fh, O_RDONLY | O_PATH);
-        checkError(fd);
+        checkError(fd >= 0);
         return toInode(path2fh(fd, path, 0));
     }
 
@@ -187,10 +190,6 @@ public class LocalVFS implements VirtualFileSystem {
         throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
     }
 
-    private String getError() {
-        return sysVfs.strerror(runtime.getLastError());
-    }
-
     /**
      * Lookup file handle by path
      * @param fd parent directory open file descriptor
@@ -205,16 +204,30 @@ public class LocalVFS implements VirtualFileSystem {
         fh.handleBytes.set(MAX_HANDLE_SIZE);
 
         int[] mntId = new int[1];
-        int len = sysVfs.name_to_handle_at(fd, path, fh, mntId, flags);
-        checkError(len);
+        int rc = sysVfs.name_to_handle_at(fd, path, fh, mntId, flags);
+        checkError(rc == 0);
         LOG.debug("path = [{}], handle = {}", path, fh);
         return fh;
     }
 
-    private void checkError(int error) throws IOException {
-        if (error < 0) {
-            LOG.warn("Last error({}} : {}", error, getError());
-            throw new IOException(getError());
+    private void checkError(boolean condition) throws IOException {
+
+        if (condition) {
+            return;
+        }
+
+        int errno = runtime.getLastError();
+        Errno e = Errno.valueOf(errno);
+        String msg = sysVfs.strerror(errno) + " " + e.name() + "(" + errno + ")";
+        LOG.info("Last error: {}", msg);
+
+        switch(e) {
+            case ENOENT:
+                throw new NoEntException(msg);
+            case EIO:
+                throw new NfsIoException(msg);
+            default:
+                throw new ServerFaultException(msg);
         }
     }
 
