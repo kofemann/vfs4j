@@ -64,7 +64,7 @@ public class LocalVFS implements VirtualFileSystem {
         checkError(len);
         mountId = mntId[0];
 
-        LOG.debug("handle  =  {}, mountid = {}", rootFh, mntId[0]);
+        LOG.debug("handle  =  {}, mountid = {}", rootFh, mountId);
 
     }
 
@@ -92,9 +92,9 @@ public class LocalVFS implements VirtualFileSystem {
     public Inode lookup(Inode parent, String path) throws IOException {
 
         KernelFileHandle fh = toKernelFh(parent);
-        int fd = sysVfs.open_by_handle_at(mountId, fh, O_PATH);
+        int fd = sysVfs.open_by_handle_at(rootFd, fh, O_RDONLY | O_PATH);
         checkError(fd);
-        return null;
+        return toInode(path2fh(fd, path, 0));
     }
 
     @Override
@@ -207,7 +207,7 @@ public class LocalVFS implements VirtualFileSystem {
         int[] mntId = new int[1];
         int len = sysVfs.name_to_handle_at(fd, path, fh, mntId, flags);
         checkError(len);
-        LOG.debug("handle  =  {}", fh);
+        LOG.debug("path = [{}], handle = {}", path, fh);
         return fh;
     }
 

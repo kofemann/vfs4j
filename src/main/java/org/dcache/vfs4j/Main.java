@@ -9,7 +9,7 @@ public class Main {
     public static void main(String args[]) throws IOException {
 
         LocalVFS vfs = new LocalVFS(new File("/tmp"));
-        vfs.lookup(vfs.getRootInode(), "aa");
+        System.out.println(vfs.lookup(vfs.getRootInode(), "aa"));
         System.out.println(vfs.getRootInode());
 
     }
