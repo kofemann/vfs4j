@@ -93,10 +93,7 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public Inode lookup(Inode parent, String path) throws IOException {
-
-        KernelFileHandle fh = toKernelFh(parent);
-        int fd = sysVfs.open_by_handle_at(rootFd, fh, O_RDONLY | O_PATH);
-        checkError(fd >= 0);
+        int fd = inode2fd(parent);
         return toInode(path2fh(fd, path, 0));
     }
 
@@ -157,7 +154,12 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public Stat getattr(Inode inode) throws IOException {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+
+        int fd = inode2fd(inode);
+        FileStat stat = new FileStat(runtime);
+        int rc = sysVfs.__fxstat64(0, fd, stat);
+        checkError(rc == 0);
+        return toVfsStat(stat);
     }
 
     @Override
@@ -231,6 +233,13 @@ public class LocalVFS implements VirtualFileSystem {
         }
     }
 
+    private int inode2fd(Inode inode) throws IOException {
+        KernelFileHandle fh = toKernelFh(inode);
+        int fd = sysVfs.open_by_handle_at(rootFd, fh, O_RDONLY | O_PATH);
+        checkError(fd >= 0);
+        return fd;
+    }
+
     private KernelFileHandle toKernelFh(Inode inode) {
         byte[] data = inode.getFileId();
         KernelFileHandle fh = new KernelFileHandle(runtime);
@@ -250,6 +259,27 @@ public class LocalVFS implements VirtualFileSystem {
         return Inode.forFile(data);
     }
 
+    private Stat toVfsStat(FileStat fileStat) {
+        Stat vfsStat = new Stat();
+
+        vfsStat.setATime(fileStat.st_atime.get()*1000);
+        vfsStat.setCTime(fileStat.st_ctime.get()*1000);
+        vfsStat.setMTime(fileStat.st_mtime.get()*1000);
+
+        vfsStat.setGid(fileStat.st_gid.get());
+        vfsStat.setUid(fileStat.st_uid.get());
+        vfsStat.setDev(fileStat.st_dev.intValue());
+        vfsStat.setIno(fileStat.st_ino.intValue());
+        vfsStat.setMode(fileStat.st_mode.get());
+        vfsStat.setNlink(fileStat.st_nlink.intValue());
+        vfsStat.setRdev(fileStat.st_rdev.intValue());
+        vfsStat.setSize(fileStat.st_size.get());
+        vfsStat.setFileid(fileStat.st_ino.get());
+        vfsStat.setGeneration(fileStat.st_ctime.get() ^ fileStat.st_mtime.get());
+
+        return vfsStat;
+    }
+
     public interface SysVfs {
 
         String strerror(int e);
@@ -258,5 +288,6 @@ public class LocalVFS implements VirtualFileSystem {
 
         int name_to_handle_at(int fd, CharSequence name, @Out @In KernelFileHandle fh, @Out int[] mntId, int flag);
         int open_by_handle_at(int mount_fd, @In KernelFileHandle fh, int flags);
+        int __fxstat64(int version, int fd, @Transient @Out FileStat fileStat);
     }
 }
