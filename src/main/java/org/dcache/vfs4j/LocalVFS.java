@@ -2,11 +2,14 @@ package org.dcache.vfs4j;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import javax.security.auth.Subject;
 
 import jnr.ffi.provider.FFIProvider;
 import jnr.constants.platform.Errno;
+import jnr.ffi.Address;
 import jnr.ffi.annotations.*;
 import org.dcache.nfs.status.NfsIoException;
 import org.dcache.nfs.status.NoEntException;
@@ -100,7 +103,34 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public List<DirectoryEntry> list(Inode inode) throws IOException {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+
+        List<DirectoryEntry> list = new ArrayList<>();
+        int fd = inode2fd(inode);
+        Address p = sysVfs.fdopendir(fd);
+        checkError(p != null);
+
+        while (true) {
+            Dirent dirent = sysVfs.readdir(p);
+//            checkError(dirent != null);
+
+            if (dirent == null) {
+                break;
+            }
+
+            byte[] b = new byte[255];
+            int i = 0;
+            for (; dirent.d_name[i].get() != '\0'; i++) {
+                b[i] = dirent.d_name[i].get();
+            }
+            String name = new String(b, 0, i, StandardCharsets.UTF_8);
+            Inode fInode = lookup(inode, name);
+            Stat stat = getattr(fInode);
+            list.add( new DirectoryEntry(name, fInode, stat));
+
+        }
+        int rc = sysVfs.closedir(p);
+        checkError(rc == 0);
+        return list;
     }
 
     @Override
@@ -190,6 +220,7 @@ public class LocalVFS implements VirtualFileSystem {
 
     /**
      * Lookup file handle by path
+     *
      * @param fd parent directory open file descriptor
      * @param path path within a directory
      * @param flags ...
@@ -218,7 +249,7 @@ public class LocalVFS implements VirtualFileSystem {
         String msg = sysVfs.strerror(errno) + " " + e.name() + "(" + errno + ")";
         LOG.info("Last error: {}", msg);
 
-        switch(e) {
+        switch (e) {
             case ENOENT:
                 throw new NoEntException(msg);
             case EIO:
@@ -230,7 +261,7 @@ public class LocalVFS implements VirtualFileSystem {
 
     private int inode2fd(Inode inode) throws IOException {
         KernelFileHandle fh = toKernelFh(inode);
-        int fd = sysVfs.open_by_handle_at(rootFd, fh, O_RDONLY | O_PATH);
+        int fd = sysVfs.open_by_handle_at(rootFd, fh, O_RDONLY );
         checkError(fd >= 0);
         return fd;
     }
@@ -240,7 +271,7 @@ public class LocalVFS implements VirtualFileSystem {
         KernelFileHandle fh = new KernelFileHandle(runtime);
         fh.handleType.set(rootFh.handleType.intValue());
         fh.handleBytes.set(data.length);
-        for(int i = 0; i < data.length; i++) {
+        for (int i = 0; i < data.length; i++) {
             fh.handleData[i].set(data[i]);
         }
         return fh;
@@ -257,9 +288,9 @@ public class LocalVFS implements VirtualFileSystem {
     private Stat toVfsStat(FileStat fileStat) {
         Stat vfsStat = new Stat();
 
-        vfsStat.setATime(fileStat.st_atime.get()*1000);
-        vfsStat.setCTime(fileStat.st_ctime.get()*1000);
-        vfsStat.setMTime(fileStat.st_mtime.get()*1000);
+        vfsStat.setATime(fileStat.st_atime.get() * 1000);
+        vfsStat.setCTime(fileStat.st_ctime.get() * 1000);
+        vfsStat.setMTime(fileStat.st_mtime.get() * 1000);
 
         vfsStat.setGid(fileStat.st_gid.get());
         vfsStat.setUid(fileStat.st_uid.get());
@@ -282,7 +313,15 @@ public class LocalVFS implements VirtualFileSystem {
         int open(CharSequence path, int flags, int mode);
 
         int name_to_handle_at(int fd, CharSequence name, @Out @In KernelFileHandle fh, @Out int[] mntId, int flag);
+
         int open_by_handle_at(int mount_fd, @In KernelFileHandle fh, int flags);
+
         int __fxstat64(int version, int fd, @Transient @Out FileStat fileStat);
+
+        Address fdopendir(int fd);
+
+        int closedir(@In Address dirp);
+
+        Dirent readdir(@In @Out Address dirp);
     }
 }
