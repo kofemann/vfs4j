@@ -7,15 +7,19 @@ import jnr.ffi.Struct;
  */
 public class KernelFileHandle extends Struct {
 
+    // stolen from /usr/include/bits/fcntl-linux.h
+    public final static int MAX_HANDLE_SZ = 128;
+
     protected KernelFileHandle(jnr.ffi.Runtime runtime) {
         super(runtime);
+        handleBytes.set(MAX_HANDLE_SZ);
     }
 
     public final u_int32_t handleBytes = new u_int32_t();
 
     public final int32_t handleType = new int32_t();
 
-    public final Signed8[] handleData = array(new Signed8[1024]);
+    public final Signed8[] handleData = array(new Signed8[MAX_HANDLE_SZ]);
 
     private final static char[] HEX = new char[]{
         '0', '1', '2', '3', '4', '5', '6', '7',

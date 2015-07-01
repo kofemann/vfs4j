@@ -36,9 +36,6 @@ public class LocalVFS implements VirtualFileSystem {
 
     private final static int AT_EMPTY_PATH = 0x1000;
 
-    private final static int MAX_HANDLE_SIZE = 48;
-    private final static int MIN_HANDLE_SIZE = 4;
-
     private final static int NONE = 0;
 
     private final SysVfs sysVfs;
@@ -60,7 +57,6 @@ public class LocalVFS implements VirtualFileSystem {
         rootFd = sysVfs.open(root.getAbsolutePath(), O_RDONLY | O_DIRECTORY, NONE);
         checkError(rootFd >= 0);
         rootFh = new KernelFileHandle(runtime);
-        rootFh.handleBytes.set(MAX_HANDLE_SIZE);
 
         int[] mntId = new int[1];
         int rc = sysVfs.name_to_handle_at(rootFd, "", rootFh, mntId, AT_EMPTY_PATH);
@@ -203,7 +199,6 @@ public class LocalVFS implements VirtualFileSystem {
     private KernelFileHandle path2fh(int fd, String path, int flags) throws IOException {
 
         KernelFileHandle fh = new KernelFileHandle(runtime);
-        fh.handleBytes.set(MAX_HANDLE_SIZE);
 
         int[] mntId = new int[1];
         int rc = sysVfs.name_to_handle_at(fd, path, fh, mntId, flags);
