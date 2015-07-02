@@ -11,9 +11,7 @@ import jnr.ffi.provider.FFIProvider;
 import jnr.constants.platform.Errno;
 import jnr.ffi.Address;
 import jnr.ffi.annotations.*;
-import org.dcache.nfs.status.NfsIoException;
-import org.dcache.nfs.status.NoEntException;
-import org.dcache.nfs.status.ServerFaultException;
+import org.dcache.nfs.status.*;
 
 import org.dcache.nfs.v4.NfsIdMapping;
 import org.dcache.nfs.v4.xdr.nfsace4;
@@ -253,6 +251,8 @@ public class LocalVFS implements VirtualFileSystem {
         switch (e) {
             case ENOENT:
                 throw new NoEntException(msg);
+            case ENOTDIR:
+                throw new NotDirException(msg);
             case EIO:
                 throw new NfsIoException(msg);
             default:
