@@ -92,7 +92,7 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public Inode lookup(Inode parent, String path) throws IOException {
-        int fd = inode2fd(parent);
+        int fd = inode2fd(parent, O_DIRECTORY | O_PATH | O_RDONLY);
         return toInode(path2fh(fd, path, 0));
     }
 
@@ -105,7 +105,7 @@ public class LocalVFS implements VirtualFileSystem {
     public List<DirectoryEntry> list(Inode inode) throws IOException {
 
         List<DirectoryEntry> list = new ArrayList<>();
-        int fd = inode2fd(inode);
+        int fd = inode2fd(inode, O_DIRECTORY | O_RDONLY);
         Address p = sysVfs.fdopendir(fd);
         checkError(p != null);
 
@@ -181,7 +181,7 @@ public class LocalVFS implements VirtualFileSystem {
     @Override
     public Stat getattr(Inode inode) throws IOException {
 
-        int fd = inode2fd(inode);
+        int fd = inode2fd(inode, O_PATH | O_RDONLY);
         FileStat stat = new FileStat(runtime);
         int rc = sysVfs.__fxstat64(0, fd, stat);
         checkError(rc == 0);
@@ -248,6 +248,7 @@ public class LocalVFS implements VirtualFileSystem {
         Errno e = Errno.valueOf(errno);
         String msg = sysVfs.strerror(errno) + " " + e.name() + "(" + errno + ")";
         LOG.info("Last error: {}", msg);
+        new Exception().printStackTrace();
 
         switch (e) {
             case ENOENT:
@@ -259,9 +260,9 @@ public class LocalVFS implements VirtualFileSystem {
         }
     }
 
-    private int inode2fd(Inode inode) throws IOException {
+    private int inode2fd(Inode inode, int flags) throws IOException {
         KernelFileHandle fh = toKernelFh(inode);
-        int fd = sysVfs.open_by_handle_at(rootFd, fh, O_RDONLY );
+        int fd = sysVfs.open_by_handle_at(rootFd, fh, flags);
         checkError(fd >= 0);
         return fd;
     }
