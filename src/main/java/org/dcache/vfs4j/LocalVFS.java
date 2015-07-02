@@ -2,7 +2,6 @@ package org.dcache.vfs4j;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import javax.security.auth.Subject;
@@ -25,6 +24,7 @@ import org.dcache.nfs.vfs.VirtualFileSystem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 /**
  */
 public class LocalVFS implements VirtualFileSystem {
@@ -35,6 +35,7 @@ public class LocalVFS implements VirtualFileSystem {
     private final static int O_DIRECTORY = 0200000;
     private final static int O_RDONLY = 00;
     private final static int O_PATH = 010000000;
+    private final static int O_NOFOLLOW	= 0400000;
 
     private final static int AT_EMPTY_PATH = 0x1000;
 
@@ -124,7 +125,7 @@ public class LocalVFS implements VirtualFileSystem {
             for (; dirent.d_name[i].get() != '\0'; i++) {
                 b[i] = dirent.d_name[i].get();
             }
-            String name = new String(b, 0, i, StandardCharsets.UTF_8);
+            String name = new String(b, 0, i, UTF_8);
             Inode fInode = lookup(inode, name);
             Stat stat = getattr(fInode);
             list.add( new DirectoryEntry(name, fInode, stat));
@@ -157,7 +158,12 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public String readlink(Inode inode) throws IOException {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        int fd = inode2fd(inode, O_RDONLY | O_PATH | O_NOFOLLOW);
+        Stat stat = statByFd(fd);
+        byte[] buf = new byte[(int)stat.getSize()];
+        int rc = sysVfs.readlinkat(fd, "", buf, buf.length);
+        checkError(rc == 0);
+        return new String(buf, UTF_8);
     }
 
     @Override
@@ -182,12 +188,8 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public Stat getattr(Inode inode) throws IOException {
-
         int fd = inode2fd(inode, O_PATH | O_RDONLY);
-        FileStat stat = new FileStat(runtime);
-        int rc = sysVfs.__fxstat64(0, fd, stat);
-        checkError(rc == 0);
-        return toVfsStat(stat);
+        return statByFd(fd);
     }
 
     @Override
@@ -290,6 +292,13 @@ public class LocalVFS implements VirtualFileSystem {
         return Inode.forFile(data);
     }
 
+    private Stat statByFd(int fd) throws IOException {
+        FileStat stat = new FileStat(runtime);
+        int rc = sysVfs.__fxstat64(0, fd, stat);
+        checkError(rc == 0);
+        return toVfsStat(stat);
+    }
+
     private Stat toVfsStat(FileStat fileStat) {
         Stat vfsStat = new Stat();
 
@@ -328,5 +337,7 @@ public class LocalVFS implements VirtualFileSystem {
         int closedir(@In Address dirp);
 
         Dirent readdir(@In @Out Address dirp);
+
+        int readlinkat(int fd, CharSequence path, @Out byte[] buf, int len);
     }
 }
