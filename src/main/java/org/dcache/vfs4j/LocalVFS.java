@@ -14,6 +14,7 @@ import jnr.ffi.annotations.*;
 import org.dcache.nfs.status.*;
 
 import org.dcache.nfs.v4.NfsIdMapping;
+import org.dcache.nfs.v4.SimpleIdMap;
 import org.dcache.nfs.v4.xdr.nfsace4;
 import org.dcache.nfs.vfs.AclCheckable;
 import org.dcache.nfs.vfs.DirectoryEntry;
@@ -46,6 +47,8 @@ public class LocalVFS implements VirtualFileSystem {
     private final KernelFileHandle rootFh;
     private final int rootFd;
     private final int mountId;
+
+    private final NfsIdMapping idMapper = new SimpleIdMap();
 
     public LocalVFS(File root) throws IOException {
         this.root = root;
@@ -213,7 +216,7 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public NfsIdMapping getIdMapper() {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        return idMapper;
     }
 
     /**
