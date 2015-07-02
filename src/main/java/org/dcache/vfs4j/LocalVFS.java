@@ -73,7 +73,8 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public int access(Inode inode, int mode) throws IOException {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        // pseudofs will do the checks
+        return mode;
     }
 
     @Override
