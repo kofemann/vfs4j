@@ -257,7 +257,6 @@ public class LocalVFS implements VirtualFileSystem {
         Errno e = Errno.valueOf(errno);
         String msg = sysVfs.strerror(errno) + " " + e.name() + "(" + errno + ")";
         LOG.info("Last error: {}", msg);
-        new Exception().printStackTrace();
 
         switch (e) {
             case ENOENT:
@@ -267,7 +266,9 @@ public class LocalVFS implements VirtualFileSystem {
             case EIO:
                 throw new NfsIoException(msg);
             default:
-                throw new ServerFaultException(msg);
+                IOException t = new ServerFaultException(msg);
+                LOG.error("unhandled exception ", t);
+                throw t;
         }
     }
 
