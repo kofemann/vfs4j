@@ -38,6 +38,7 @@ public class LocalVFS implements VirtualFileSystem {
     private final static int O_PATH = 010000000;
     private final static int O_NOFOLLOW	= 0400000;
 
+    private final static int AT_REMOVEDIR = 0x200;
     private final static int AT_EMPTY_PATH = 0x1000;
 
     private final static int NONE = 0;
@@ -172,7 +173,13 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public void remove(Inode parent, String path) throws IOException {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        try (RawFd fd = inode2fd(parent, O_PATH | O_DIRECTORY)) {
+            Inode inode = lookup(parent, path);
+            Stat stat = getattr(inode);
+            int flags = stat.type() == Stat.Type.DIRECTORY ? AT_REMOVEDIR : 0;
+            int rc = sysVfs.unlinkat(fd.fd(), path, flags);
+            checkError(rc == 0);
+        }
     }
 
     @Override
@@ -263,8 +270,12 @@ public class LocalVFS implements VirtualFileSystem {
                 throw new NoEntException(msg);
             case ENOTDIR:
                 throw new NotDirException(msg);
+            case EISDIR:
+                throw new IsDirException(msg);
             case EIO:
                 throw new NfsIoException(msg);
+            case ENOTEMPTY:
+                throw new NotEmptyException(msg);
             default:
                 IOException t = new ServerFaultException(msg);
                 LOG.error("unhandled exception ", t);
@@ -345,6 +356,8 @@ public class LocalVFS implements VirtualFileSystem {
         Dirent readdir(@In @Out Address dirp);
 
         int readlinkat(int fd, CharSequence path, @Out byte[] buf, int len);
+
+        int unlinkat(int fd, CharSequence path, int flags);
 
         int close(int fd);
     }
