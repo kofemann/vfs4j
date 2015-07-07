@@ -13,6 +13,7 @@ import jnr.ffi.Address;
 import jnr.ffi.annotations.*;
 import org.dcache.nfs.status.*;
 
+import org.dcache.auth.Subjects;
 import org.dcache.nfs.v4.NfsIdMapping;
 import org.dcache.nfs.v4.SimpleIdMap;
 import org.dcache.nfs.v4.xdr.nfsace4;
@@ -26,6 +27,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
+
 /**
  */
 public class LocalVFS implements VirtualFileSystem {
@@ -142,7 +144,20 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public Inode mkdir(Inode parent, String path, Subject subject, int mode) throws IOException {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        int uid = (int) Subjects.getUid(subject);
+        int gid = (int) Subjects.getPrimaryGid(subject);
+
+        Inode inode;
+        try (RawFd fd = inode2fd(parent, O_PATH | O_NOFOLLOW | O_DIRECTORY)) {
+            int rc = sysVfs.mkdirat(fd.fd(), path, mode);
+            checkError(rc == 0);
+            inode = lookup(parent, path);
+            try (RawFd fd1 = inode2fd(inode, O_NOFOLLOW | O_DIRECTORY)) {
+                rc = sysVfs.fchown(fd1.fd(), uid, gid);
+                checkError(rc == 0);
+            }
+            return inode;
+        }
     }
 
     @Override
@@ -360,6 +375,10 @@ public class LocalVFS implements VirtualFileSystem {
         int unlinkat(int fd, CharSequence path, int flags);
 
         int close(int fd);
+
+        int mkdirat(int fd, CharSequence path, int mode);
+
+        int fchown(int fd, int uid, int gid);
     }
 
     private class RawFd implements Closeable {
