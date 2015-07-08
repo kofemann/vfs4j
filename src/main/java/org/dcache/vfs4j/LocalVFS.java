@@ -39,6 +39,8 @@ public class LocalVFS implements VirtualFileSystem {
     private final static int O_RDONLY = 00;
     private final static int O_PATH = 010000000;
     private final static int O_NOFOLLOW	= 0400000;
+    private final static int O_EXCL = 0200;
+    private final static int O_CREAT = 0100;
 
     private final static int AT_REMOVEDIR = 0x200;
     private final static int AT_EMPTY_PATH = 0x1000;
@@ -84,7 +86,24 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public Inode create(Inode parent, Stat.Type type, String path, Subject subject, int mode) throws IOException {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        int uid = (int) Subjects.getUid(subject);
+        int gid = (int) Subjects.getPrimaryGid(subject);
+
+        if (type != Stat.Type.REGULAR) {
+            throw new NotSuppException("create of this type not supported");
+        }
+
+        try (RawFd fd = inode2fd(parent, O_NOFOLLOW | O_DIRECTORY)) {
+            int rfd = sysVfs.openat(fd.fd(), path, O_EXCL | O_CREAT, mode);
+            checkError(rfd >= 0);
+            int rc = sysVfs.fchown(rfd, uid, gid);
+            checkError(rc == 0);
+
+            KernelFileHandle fh = path2fh(rfd, "", AT_EMPTY_PATH);
+            sysVfs.close(rfd);
+
+            return toInode(fh);
+        }
     }
 
     @Override
@@ -309,7 +328,7 @@ public class LocalVFS implements VirtualFileSystem {
         int errno = runtime.getLastError();
         Errno e = Errno.valueOf(errno);
         String msg = sysVfs.strerror(errno) + " " + e.name() + "(" + errno + ")";
-        LOG.info("Last error: {}", msg);
+        LOG.debug("Last error: {}", msg);
 
         switch (e) {
             case ENOENT:
@@ -322,6 +341,8 @@ public class LocalVFS implements VirtualFileSystem {
                 throw new NfsIoException(msg);
             case ENOTEMPTY:
                 throw new NotEmptyException(msg);
+            case EEXIST:
+                throw new ExistException(msg);
             default:
                 IOException t = new ServerFaultException(msg);
                 LOG.error("unhandled exception ", t);
@@ -388,6 +409,8 @@ public class LocalVFS implements VirtualFileSystem {
         String strerror(int e);
 
         int open(CharSequence path, int flags, int mode);
+
+        int openat(int dirfd, CharSequence name, int flags, int mode);
 
         int name_to_handle_at(int fd, CharSequence name, @Out @In KernelFileHandle fh, @Out int[] mntId, int flag);
 
