@@ -37,6 +37,9 @@ public class LocalVFS implements VirtualFileSystem {
     // stolen from /usr/include/bits/fcntl-linux.h
     private final static int O_DIRECTORY = 0200000;
     private final static int O_RDONLY = 00;
+    private final static int O_WRONLY = 01;
+    private final static int O_RDWR = 02;
+
     private final static int O_PATH = 010000000;
     private final static int O_NOFOLLOW	= 0400000;
     private final static int O_EXCL = 0200;
@@ -227,7 +230,27 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public WriteResult write(Inode inode, byte[] data, long offset, int count, StabilityLevel stabilityLevel) throws IOException {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        try (RawFd fd = inode2fd(inode, O_NOFOLLOW | O_WRONLY)) {
+            int n = sysVfs.pwrite(fd.fd(), data, count, offset);
+            checkError(n >= 0);
+
+            int rc = 0;
+            switch(stabilityLevel) {
+                case UNSTABLE:
+                    // NOP
+                    break;
+                case DATA_SYNC:
+                    rc = sysVfs.fdatasync(fd.fd());
+                    break;
+                case FILE_SYNC:
+                    rc = sysVfs.fsync(fd.fd());
+                    break;
+                default:
+                    throw new RuntimeException("bad sync type");
+            }
+            checkError(rc == 0);
+            return new WriteResult(stabilityLevel, n);
+        }
     }
 
     @Override
@@ -244,7 +267,13 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public void setattr(Inode inode, Stat stat) throws IOException {
-        try (RawFd fd = inode2fd(inode, O_NOFOLLOW)) {
+
+        int openMode = O_NOFOLLOW;
+        if (stat.isDefined(Stat.StatAttribute.SIZE)) {
+            openMode |= O_RDWR;
+        }
+
+        try (RawFd fd = inode2fd(inode, openMode)) {
             int uid = -1;
             int gid = -1;
             int rc;
@@ -439,6 +468,12 @@ public class LocalVFS implements VirtualFileSystem {
         int ftruncate(int fildes, long length);
 
         int pread(int fd, @Out byte[] buf, int nbyte, long offset);
+
+        int pwrite(int fd, @In byte[] buf, int nbyte, long offset);
+
+        int fsync(int fd);
+
+        int fdatasync(int fd);
 
     }
 
