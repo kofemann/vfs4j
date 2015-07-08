@@ -172,7 +172,11 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public int read(Inode inode, byte[] data, long offset, int count) throws IOException {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        try (RawFd fd = inode2fd(inode, O_NOFOLLOW)) {
+            int rc = sysVfs.pread(fd.fd(), data, count, offset);
+            checkError(rc >= 0);
+            return rc;
+        }
     }
 
     @Override
@@ -263,7 +267,7 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public boolean hasIOLayout(Inode inode) throws IOException {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        return false;
     }
 
     @Override
@@ -410,6 +414,8 @@ public class LocalVFS implements VirtualFileSystem {
         int fchmod(int fd, int mode);
 
         int ftruncate(int fildes, long length);
+
+        int pread(int fd, @Out byte[] buf, int nbyte, long offset);
 
     }
 
