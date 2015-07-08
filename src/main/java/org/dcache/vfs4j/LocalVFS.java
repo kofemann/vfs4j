@@ -221,17 +221,44 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public void setattr(Inode inode, Stat stat) throws IOException {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        try (RawFd fd = inode2fd(inode, O_NOFOLLOW)) {
+            int uid = -1;
+            int gid = -1;
+            int rc;
+
+            if ( stat.isDefined(Stat.StatAttribute.OWNER) ) {
+                uid = stat.getUid();
+            }
+
+            if (stat.isDefined(Stat.StatAttribute.GROUP) ){
+                gid = stat.getGid();
+            }
+
+            if (uid != -1 || gid != -1) {
+                rc = sysVfs.fchown(fd.fd(), uid, gid);
+                checkError(rc == 0);
+            }
+
+            if (stat.isDefined(Stat.StatAttribute.MODE)) {
+                rc = sysVfs.fchmod(fd.fd(), stat.getMode());
+                checkError(rc == 0);
+            }
+
+            if (stat.isDefined(Stat.StatAttribute.SIZE)) {
+                rc = sysVfs.ftruncate(fd.fd(), stat.getSize());
+                checkError(rc == 0);
+            }
+        }
     }
 
     @Override
     public nfsace4[] getAcl(Inode inode) throws IOException {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        return new nfsace4[0];
     }
 
     @Override
     public void setAcl(Inode inode, nfsace4[] acl) throws IOException {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        // NOP
     }
 
     @Override
@@ -379,6 +406,11 @@ public class LocalVFS implements VirtualFileSystem {
         int mkdirat(int fd, CharSequence path, int mode);
 
         int fchown(int fd, int uid, int gid);
+
+        int fchmod(int fd, int mode);
+
+        int ftruncate(int fildes, long length);
+
     }
 
     private class RawFd implements Closeable {
