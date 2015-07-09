@@ -126,7 +126,14 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public FsStat getFsStat() throws IOException {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        StatFs statFs = new StatFs(runtime);
+        int rc = sysVfs.fstatfs(rootFd, statFs);
+        checkError(rc == 0);
+
+        return new FsStat(statFs.f_blocks.get()*statFs.f_bsize.get(),
+                statFs.f_files.get(),
+                (statFs.f_blocks.get() - statFs.f_bfree.get()) * statFs.f_bsize.get(),
+                statFs.f_files.get() - statFs.f_ffree.get());
     }
 
     @Override
@@ -515,6 +522,8 @@ public class LocalVFS implements VirtualFileSystem {
         int fsync(int fd);
 
         int fdatasync(int fd);
+
+        int fstatfs(int fd, @Out StatFs statfs);
 
     }
 
