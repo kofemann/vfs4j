@@ -206,7 +206,13 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public boolean move(Inode src, String oldName, Inode dest, String newName) throws IOException {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        try (RawFd fd1 = inode2fd(src, O_NOFOLLOW | O_DIRECTORY)) {
+            try (RawFd fd2 = inode2fd(dest, O_NOFOLLOW | O_DIRECTORY)) {
+                int rc = sysVfs.renameat(fd1.fd(), oldName, fd2.fd(), newName);
+                checkError(rc == 0);
+                return true;
+            }
+        }
     }
 
     @Override
@@ -524,6 +530,8 @@ public class LocalVFS implements VirtualFileSystem {
         int fdatasync(int fd);
 
         int fstatfs(int fd, @Out StatFs statfs);
+
+        int renameat(int oldfd, CharSequence oldPath , int newfd, CharSequence newPath);
 
     }
 
