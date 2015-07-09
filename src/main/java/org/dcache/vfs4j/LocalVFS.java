@@ -211,7 +211,7 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public Inode parentOf(Inode inode) throws IOException {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        return lookup(inode, "..");
     }
 
     @Override
