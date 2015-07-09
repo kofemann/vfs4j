@@ -1,10 +1,18 @@
 package org.dcache.vfs4j;
 
+import com.google.common.base.Throwables;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
+import com.google.common.cache.RemovalListener;
+import com.google.common.cache.RemovalNotification;
+
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 import javax.security.auth.Subject;
 
 import jnr.ffi.provider.FFIProvider;
@@ -60,6 +68,8 @@ public class LocalVFS implements VirtualFileSystem {
 
     private final NfsIdMapping idMapper = new SimpleIdMap();
 
+    private final LoadingCache<Inode, RawFd> _openFilesCache;
+
     public LocalVFS(File root) throws IOException {
         this.root = root;
 
@@ -76,6 +86,11 @@ public class LocalVFS implements VirtualFileSystem {
         int rc = sysVfs.name_to_handle_at(rootFd, "", rootFh, mntId, AT_EMPTY_PATH);
         checkError(rc == 0);
         mountId = mntId[0];
+
+        _openFilesCache =  CacheBuilder.newBuilder()
+                .maximumSize(1024)
+                .removalListener( new FileCloser())
+                .build( new FileOpenner() );
 
         LOG.debug("handle  =  {}, mountid = {}", rootFh, mountId);
 
@@ -97,15 +112,15 @@ public class LocalVFS implements VirtualFileSystem {
         }
 
         try (RawFd fd = inode2fd(parent, O_NOFOLLOW | O_DIRECTORY)) {
-            int rfd = sysVfs.openat(fd.fd(), path, O_EXCL | O_CREAT, mode);
+            int rfd = sysVfs.openat(fd.fd(), path, O_EXCL | O_CREAT | O_RDWR, mode);
             checkError(rfd >= 0);
             int rc = sysVfs.fchown(rfd, uid, gid);
             checkError(rc == 0);
 
             KernelFileHandle fh = path2fh(rfd, "", AT_EMPTY_PATH);
-            sysVfs.close(rfd);
-
-            return toInode(fh);
+            Inode inode =  toInode(fh);
+            _openFilesCache.put(inode, new RawFd(rfd));
+            return inode;
         }
     }
 
@@ -194,11 +209,10 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public int read(Inode inode, byte[] data, long offset, int count) throws IOException {
-        try (RawFd fd = inode2fd(inode, O_NOFOLLOW)) {
-            int rc = sysVfs.pread(fd.fd(), data, count, offset);
-            checkError(rc >= 0);
-            return rc;
-        }
+        RawFd fd = getOfLoadRawFd(inode);
+        int rc = sysVfs.pread(fd.fd(), data, count, offset);
+        checkError(rc >= 0);
+        return rc;
     }
 
     @Override
@@ -230,27 +244,27 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public WriteResult write(Inode inode, byte[] data, long offset, int count, StabilityLevel stabilityLevel) throws IOException {
-        try (RawFd fd = inode2fd(inode, O_NOFOLLOW | O_WRONLY)) {
-            int n = sysVfs.pwrite(fd.fd(), data, count, offset);
-            checkError(n >= 0);
+        RawFd fd = getOfLoadRawFd(inode);
+        int n = sysVfs.pwrite(fd.fd(), data, count, offset);
+        checkError(n >= 0);
 
-            int rc = 0;
-            switch(stabilityLevel) {
-                case UNSTABLE:
-                    // NOP
-                    break;
-                case DATA_SYNC:
-                    rc = sysVfs.fdatasync(fd.fd());
-                    break;
-                case FILE_SYNC:
-                    rc = sysVfs.fsync(fd.fd());
-                    break;
-                default:
-                    throw new RuntimeException("bad sync type");
-            }
-            checkError(rc == 0);
-            return new WriteResult(stabilityLevel, n);
+        int rc = 0;
+        switch (stabilityLevel) {
+            case UNSTABLE:
+                // NOP
+                break;
+            case DATA_SYNC:
+                rc = sysVfs.fdatasync(fd.fd());
+                break;
+            case FILE_SYNC:
+                rc = sysVfs.fsync(fd.fd());
+                break;
+            default:
+                throw new RuntimeException("bad sync type");
         }
+        checkError(rc == 0);
+        return new WriteResult(stabilityLevel, n);
+
     }
 
     @Override
@@ -431,6 +445,33 @@ public class LocalVFS implements VirtualFileSystem {
         vfsStat.setGeneration(fileStat.st_ctime.get() ^ fileStat.st_mtime.get());
 
         return vfsStat;
+    }
+
+    private class FileCloser implements RemovalListener<Inode, RawFd> {
+
+        @Override
+        public void onRemoval(RemovalNotification<Inode, RawFd> notification) {
+            sysVfs.close(notification.getValue().fd());
+        }
+    }
+
+    private class FileOpenner extends CacheLoader<Inode, RawFd> {
+
+        @Override
+        public RawFd load(Inode key) throws Exception {
+            return inode2fd(key, O_NOFOLLOW | O_RDWR);
+        }
+    }
+
+
+    private RawFd getOfLoadRawFd(Inode inode) throws IOException {
+        try {
+            return _openFilesCache.get(inode);
+        } catch (ExecutionException e) {
+            Throwable t = e.getCause();
+            Throwables.propagateIfInstanceOf(t, IOException.class);
+            throw new IOException(e.getMessage(), t);
+        }
     }
 
     public interface SysVfs {
