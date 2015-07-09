@@ -304,7 +304,7 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public void commit(Inode inode, long offset, int count) throws IOException {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        // NOP
     }
 
     @Override
