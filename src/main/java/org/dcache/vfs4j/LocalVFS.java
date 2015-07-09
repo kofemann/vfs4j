@@ -477,7 +477,7 @@ public class LocalVFS implements VirtualFileSystem {
         vfsStat.setRdev(fileStat.st_rdev.intValue());
         vfsStat.setSize(fileStat.st_size.get());
         vfsStat.setFileid(fileStat.st_ino.get());
-        vfsStat.setGeneration(fileStat.st_ctime.get() ^ fileStat.st_mtime.get());
+        vfsStat.setGeneration(Math.max(fileStat.st_ctime.get(), fileStat.st_mtime.get()));
 
         return vfsStat;
     }
