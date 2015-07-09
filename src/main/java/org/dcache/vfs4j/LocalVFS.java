@@ -53,6 +53,7 @@ public class LocalVFS implements VirtualFileSystem {
     private final static int O_EXCL = 0200;
     private final static int O_CREAT = 0100;
 
+    private final static int AT_SYMLINK_NOFOLLOW = 0x100;
     private final static int AT_REMOVEDIR = 0x200;
     private final static int AT_EMPTY_PATH = 0x1000;
 
@@ -114,7 +115,7 @@ public class LocalVFS implements VirtualFileSystem {
         try (RawFd fd = inode2fd(parent, O_NOFOLLOW | O_DIRECTORY)) {
             int rfd = sysVfs.openat(fd.fd(), path, O_EXCL | O_CREAT | O_RDWR, mode);
             checkError(rfd >= 0);
-            int rc = sysVfs.fchown(rfd, uid, gid);
+            int rc = sysVfs.fchownat(rfd, "", uid, gid, AT_EMPTY_PATH);
             checkError(rc == 0);
 
             KernelFileHandle fh = path2fh(rfd, "", AT_EMPTY_PATH);
@@ -197,7 +198,7 @@ public class LocalVFS implements VirtualFileSystem {
             checkError(rc == 0);
             inode = lookup(parent, path);
             try (RawFd fd1 = inode2fd(inode, O_NOFOLLOW | O_DIRECTORY)) {
-                rc = sysVfs.fchown(fd1.fd(), uid, gid);
+                rc = sysVfs.fchownat(fd1.fd(), "", uid, gid, AT_EMPTY_PATH );
                 checkError(rc == 0);
             }
             return inode;
@@ -252,7 +253,22 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public Inode symlink(Inode parent, String path, String link, Subject subject, int mode) throws IOException {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        int uid = (int) Subjects.getUid(subject);
+        int gid = (int) Subjects.getPrimaryGid(subject);
+
+        try (RawFd fd = inode2fd(parent, O_DIRECTORY)) {
+            int rc = sysVfs.symlinkat(link, fd.fd(), path);
+            checkError(rc == 0);
+            Inode inode = lookup(parent, path);
+            Stat stat = new Stat();
+            stat.setUid(uid);
+            stat.setGid(gid);
+            try (RawFd fd1 = inode2fd(inode, O_PATH)) {
+                rc = sysVfs.fchownat(fd1.fd(), "", uid, gid, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW);
+                checkError(rc == 0);
+            }
+            return inode;
+        }
     }
 
     @Override
@@ -295,7 +311,7 @@ public class LocalVFS implements VirtualFileSystem {
     @Override
     public void setattr(Inode inode, Stat stat) throws IOException {
 
-        int openMode = O_NOFOLLOW;
+        int openMode = O_RDONLY;
         if (stat.isDefined(Stat.StatAttribute.SIZE)) {
             openMode |= O_RDWR;
         }
@@ -314,7 +330,7 @@ public class LocalVFS implements VirtualFileSystem {
             }
 
             if (uid != -1 || gid != -1) {
-                rc = sysVfs.fchown(fd.fd(), uid, gid);
+                rc = sysVfs.fchownat(fd.fd(), "", uid, gid, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW);
                 checkError(rc == 0);
             }
 
@@ -515,7 +531,7 @@ public class LocalVFS implements VirtualFileSystem {
 
         int mkdirat(int fd, CharSequence path, int mode);
 
-        int fchown(int fd, int uid, int gid);
+        int fchownat(int fd, CharSequence path, int uid, int gid, int flags);
 
         int fchmod(int fd, int mode);
 
@@ -532,6 +548,8 @@ public class LocalVFS implements VirtualFileSystem {
         int fstatfs(int fd, @Out StatFs statfs);
 
         int renameat(int oldfd, CharSequence oldPath , int newfd, CharSequence newPath);
+
+        int symlinkat(CharSequence target, int newdirfd, CharSequence linkpath);
 
     }
 
