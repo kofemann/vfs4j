@@ -151,7 +151,13 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public Inode link(Inode parent, Inode link, String path, Subject subject) throws IOException {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        try (RawFd dirFd = inode2fd(parent, O_NOFOLLOW | O_DIRECTORY)) {
+            try (RawFd inodeFd = inode2fd(link, O_NOFOLLOW)) {
+                int rc = sysVfs.linkat(inodeFd.fd(), "", dirFd.fd(), path, AT_EMPTY_PATH);
+                checkError(rc == 0);
+                return lookup(parent, path);
+            }
+        }
     }
 
     @Override
@@ -551,6 +557,7 @@ public class LocalVFS implements VirtualFileSystem {
 
         int symlinkat(CharSequence target, int newdirfd, CharSequence linkpath);
 
+        int linkat(int fd1, CharSequence path1, int fd2, CharSequence path2, int flag);
     }
 
     private class RawFd implements Closeable {
