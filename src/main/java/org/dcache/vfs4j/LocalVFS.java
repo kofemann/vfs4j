@@ -347,7 +347,7 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public AclCheckable getAclCheckable() {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        return AclCheckable.UNDEFINED_ALL;
     }
 
     @Override
