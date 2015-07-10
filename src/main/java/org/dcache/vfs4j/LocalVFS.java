@@ -60,7 +60,6 @@ public class LocalVFS implements VirtualFileSystem {
     private final SysVfs sysVfs;
     private final jnr.ffi.Runtime runtime;
 
-    private final File root;
     private final KernelFileHandle rootFh;
     private final int rootFd;
     private final int mountId;
@@ -70,7 +69,6 @@ public class LocalVFS implements VirtualFileSystem {
     private final LoadingCache<Inode, RawFd> _openFilesCache;
 
     public LocalVFS(File root) throws IOException {
-        this.root = root;
 
         sysVfs = FFIProvider.getSystemProvider()
                 .createLibraryLoader(SysVfs.class)
