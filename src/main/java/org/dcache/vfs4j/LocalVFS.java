@@ -57,8 +57,6 @@ public class LocalVFS implements VirtualFileSystem {
     private final static int AT_REMOVEDIR = 0x200;
     private final static int AT_EMPTY_PATH = 0x1000;
 
-    private final static int NONE = 0;
-
     private final SysVfs sysVfs;
     private final jnr.ffi.Runtime runtime;
 
@@ -79,7 +77,7 @@ public class LocalVFS implements VirtualFileSystem {
                 .load("c");
         runtime = jnr.ffi.Runtime.getRuntime(sysVfs);
 
-        rootFd = sysVfs.open(root.getAbsolutePath(), O_DIRECTORY, NONE);
+        rootFd = sysVfs.open(root.getAbsolutePath(), O_DIRECTORY, O_RDONLY);
         checkError(rootFd >= 0);
         rootFh = new KernelFileHandle(runtime);
 
