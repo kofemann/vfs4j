@@ -37,6 +37,8 @@ import org.slf4j.LoggerFactory;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
+ * A file system which implementation with is backed-up with a local file
+ * system.
  */
 public class LocalVFS implements VirtualFileSystem {
 
@@ -66,7 +68,10 @@ public class LocalVFS implements VirtualFileSystem {
 
     private final NfsIdMapping idMapper = new SimpleIdMap();
 
-    private final LoadingCache<Inode, RawFd> _openFilesCache;
+    /**
+     * Cache of opened files used by read/write operations.
+     */
+    private final LoadingCache<Inode, SystemFd> _openFilesCache;
 
     public LocalVFS(File root) throws IOException {
 
@@ -90,7 +95,6 @@ public class LocalVFS implements VirtualFileSystem {
                 .build( new FileOpenner() );
 
         LOG.debug("handle  =  {}, mountid = {}", rootFh, mountId);
-
     }
 
     @Override
@@ -108,7 +112,7 @@ public class LocalVFS implements VirtualFileSystem {
             throw new NotSuppException("create of this type not supported");
         }
 
-        try (RawFd fd = inode2fd(parent, O_NOFOLLOW | O_DIRECTORY)) {
+        try (SystemFd fd = inode2fd(parent, O_NOFOLLOW | O_DIRECTORY)) {
             int rfd = sysVfs.openat(fd.fd(), path, O_EXCL | O_CREAT | O_RDWR, mode);
             checkError(rfd >= 0);
             int rc = sysVfs.fchownat(rfd, "", uid, gid, AT_EMPTY_PATH);
@@ -116,7 +120,7 @@ public class LocalVFS implements VirtualFileSystem {
 
             KernelFileHandle fh = path2fh(rfd, "", AT_EMPTY_PATH);
             Inode inode =  fh.toInode();
-            _openFilesCache.put(inode, new RawFd(rfd));
+            _openFilesCache.put(inode, new SystemFd(rfd));
             return inode;
         }
     }
@@ -140,15 +144,15 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public Inode lookup(Inode parent, String path) throws IOException {
-        try(RawFd fd = inode2fd(parent, O_DIRECTORY | O_PATH )) {
+        try(SystemFd fd = inode2fd(parent, O_DIRECTORY | O_PATH )) {
             return path2fh(fd.fd(), path, 0).toInode();
         }
     }
 
     @Override
     public Inode link(Inode parent, Inode link, String path, Subject subject) throws IOException {
-        try (RawFd dirFd = inode2fd(parent, O_NOFOLLOW | O_DIRECTORY)) {
-            try (RawFd inodeFd = inode2fd(link, O_NOFOLLOW)) {
+        try (SystemFd dirFd = inode2fd(parent, O_NOFOLLOW | O_DIRECTORY)) {
+            try (SystemFd inodeFd = inode2fd(link, O_NOFOLLOW)) {
                 int rc = sysVfs.linkat(inodeFd.fd(), "", dirFd.fd(), path, AT_EMPTY_PATH);
                 checkError(rc == 0);
                 return lookup(parent, path);
@@ -160,7 +164,7 @@ public class LocalVFS implements VirtualFileSystem {
     public List<DirectoryEntry> list(Inode inode) throws IOException {
 
         List<DirectoryEntry> list = new ArrayList<>();
-        try (RawFd fd = inode2fd(inode, O_DIRECTORY)) {
+        try (SystemFd fd = inode2fd(inode, O_DIRECTORY)) {
             Address p = sysVfs.fdopendir(fd.fd());
             checkError(p != null);
 
@@ -186,11 +190,11 @@ public class LocalVFS implements VirtualFileSystem {
         int gid = (int) Subjects.getPrimaryGid(subject);
 
         Inode inode;
-        try (RawFd fd = inode2fd(parent, O_PATH | O_NOFOLLOW | O_DIRECTORY)) {
+        try (SystemFd fd = inode2fd(parent, O_PATH | O_NOFOLLOW | O_DIRECTORY)) {
             int rc = sysVfs.mkdirat(fd.fd(), path, mode);
             checkError(rc == 0);
             inode = lookup(parent, path);
-            try (RawFd fd1 = inode2fd(inode, O_NOFOLLOW | O_DIRECTORY)) {
+            try (SystemFd fd1 = inode2fd(inode, O_NOFOLLOW | O_DIRECTORY)) {
                 rc = sysVfs.fchownat(fd1.fd(), "", uid, gid, AT_EMPTY_PATH );
                 checkError(rc == 0);
             }
@@ -200,8 +204,8 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public boolean move(Inode src, String oldName, Inode dest, String newName) throws IOException {
-        try (RawFd fd1 = inode2fd(src, O_NOFOLLOW | O_DIRECTORY)) {
-            try (RawFd fd2 = inode2fd(dest, O_NOFOLLOW | O_DIRECTORY)) {
+        try (SystemFd fd1 = inode2fd(src, O_NOFOLLOW | O_DIRECTORY)) {
+            try (SystemFd fd2 = inode2fd(dest, O_NOFOLLOW | O_DIRECTORY)) {
                 int rc = sysVfs.renameat(fd1.fd(), oldName, fd2.fd(), newName);
                 checkError(rc == 0);
                 return true;
@@ -216,7 +220,7 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public int read(Inode inode, byte[] data, long offset, int count) throws IOException {
-        RawFd fd = getOfLoadRawFd(inode);
+        SystemFd fd = getOfLoadRawFd(inode);
         int rc = sysVfs.pread(fd.fd(), data, count, offset);
         checkError(rc >= 0);
         return rc;
@@ -224,7 +228,7 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public String readlink(Inode inode) throws IOException {
-        try (RawFd fd = inode2fd(inode, O_PATH | O_NOFOLLOW)) {
+        try (SystemFd fd = inode2fd(inode, O_PATH | O_NOFOLLOW)) {
             Stat stat = statByFd(fd);
             byte[] buf = new byte[(int) stat.getSize()];
             int rc = sysVfs.readlinkat(fd.fd(), "", buf, buf.length);
@@ -235,7 +239,7 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public void remove(Inode parent, String path) throws IOException {
-        try (RawFd fd = inode2fd(parent, O_PATH | O_DIRECTORY)) {
+        try (SystemFd fd = inode2fd(parent, O_PATH | O_DIRECTORY)) {
             Inode inode = lookup(parent, path);
             Stat stat = getattr(inode);
             int flags = stat.type() == Stat.Type.DIRECTORY ? AT_REMOVEDIR : 0;
@@ -249,14 +253,14 @@ public class LocalVFS implements VirtualFileSystem {
         int uid = (int) Subjects.getUid(subject);
         int gid = (int) Subjects.getPrimaryGid(subject);
 
-        try (RawFd fd = inode2fd(parent, O_DIRECTORY)) {
+        try (SystemFd fd = inode2fd(parent, O_DIRECTORY)) {
             int rc = sysVfs.symlinkat(link, fd.fd(), path);
             checkError(rc == 0);
             Inode inode = lookup(parent, path);
             Stat stat = new Stat();
             stat.setUid(uid);
             stat.setGid(gid);
-            try (RawFd fd1 = inode2fd(inode, O_PATH)) {
+            try (SystemFd fd1 = inode2fd(inode, O_PATH)) {
                 rc = sysVfs.fchownat(fd1.fd(), "", uid, gid, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW);
                 checkError(rc == 0);
             }
@@ -266,7 +270,7 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public WriteResult write(Inode inode, byte[] data, long offset, int count, StabilityLevel stabilityLevel) throws IOException {
-        RawFd fd = getOfLoadRawFd(inode);
+        SystemFd fd = getOfLoadRawFd(inode);
         int n = sysVfs.pwrite(fd.fd(), data, count, offset);
         checkError(n >= 0);
 
@@ -296,7 +300,7 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public Stat getattr(Inode inode) throws IOException {
-        try (RawFd fd = inode2fd(inode, O_PATH)) {
+        try (SystemFd fd = inode2fd(inode, O_PATH)) {
             return statByFd(fd);
         }
     }
@@ -309,7 +313,7 @@ public class LocalVFS implements VirtualFileSystem {
             openMode |= O_RDWR;
         }
 
-        try (RawFd fd = inode2fd(inode, openMode)) {
+        try (SystemFd fd = inode2fd(inode, openMode)) {
             int uid = -1;
             int gid = -1;
             int rc;
@@ -415,14 +419,14 @@ public class LocalVFS implements VirtualFileSystem {
         }
     }
 
-    private RawFd inode2fd(Inode inode, int flags) throws IOException {
+    private SystemFd inode2fd(Inode inode, int flags) throws IOException {
         KernelFileHandle fh = new KernelFileHandle(runtime, rootFh.handleType, inode);
         int fd = sysVfs.open_by_handle_at(rootFd, fh, flags);
         checkError(fd >= 0);
-        return new RawFd(fd);
+        return new SystemFd(fd);
     }
 
-    private Stat statByFd(RawFd fd) throws IOException {
+    private Stat statByFd(SystemFd fd) throws IOException {
         FileStat stat = new FileStat(runtime);
         int rc = sysVfs.__fxstat64(0, fd.fd(), stat);
         checkError(rc == 0);
@@ -450,24 +454,24 @@ public class LocalVFS implements VirtualFileSystem {
         return vfsStat;
     }
 
-    private class FileCloser implements RemovalListener<Inode, RawFd> {
+    private class FileCloser implements RemovalListener<Inode, SystemFd> {
 
         @Override
-        public void onRemoval(RemovalNotification<Inode, RawFd> notification) {
+        public void onRemoval(RemovalNotification<Inode, SystemFd> notification) {
             sysVfs.close(notification.getValue().fd());
         }
     }
 
-    private class FileOpenner extends CacheLoader<Inode, RawFd> {
+    private class FileOpenner extends CacheLoader<Inode, SystemFd> {
 
         @Override
-        public RawFd load(Inode key) throws Exception {
+        public SystemFd load(Inode key) throws Exception {
             return inode2fd(key, O_NOFOLLOW | O_RDWR);
         }
     }
 
 
-    private RawFd getOfLoadRawFd(Inode inode) throws IOException {
+    private SystemFd getOfLoadRawFd(Inode inode) throws IOException {
         try {
             return _openFilesCache.get(inode);
         } catch (ExecutionException e) {
@@ -477,6 +481,7 @@ public class LocalVFS implements VirtualFileSystem {
         }
     }
 
+    @SuppressWarnings("PublicInnerClass")
     public interface SysVfs {
 
         String strerror(int e);
@@ -528,11 +533,14 @@ public class LocalVFS implements VirtualFileSystem {
         int linkat(int fd1, CharSequence path1, int fd2, CharSequence path2, int flag);
     }
 
-    private class RawFd implements Closeable {
+    /**
+     * {@link AutoCloseable} class which represents OS native file descriptor.
+     */
+    private class SystemFd implements Closeable {
 
         private final int fd;
 
-        RawFd(int fd) {
+        SystemFd(int fd) {
             this.fd = fd;
         }
 
@@ -545,6 +553,5 @@ public class LocalVFS implements VirtualFileSystem {
             int rc = sysVfs.close(fd);
             checkError(rc == 0);
         }
-
     }
 }
