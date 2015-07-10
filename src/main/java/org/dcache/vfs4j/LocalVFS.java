@@ -115,7 +115,7 @@ public class LocalVFS implements VirtualFileSystem {
             checkError(rc == 0);
 
             KernelFileHandle fh = path2fh(rfd, "", AT_EMPTY_PATH);
-            Inode inode =  toInode(fh);
+            Inode inode =  fh.toInode();
             _openFilesCache.put(inode, new RawFd(rfd));
             return inode;
         }
@@ -135,13 +135,13 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public Inode getRootInode() throws IOException {
-        return toInode(rootFh);
+        return rootFh.toInode();
     }
 
     @Override
     public Inode lookup(Inode parent, String path) throws IOException {
         try(RawFd fd = inode2fd(parent, O_DIRECTORY | O_PATH )) {
-            return toInode(path2fh(fd.fd(), path, 0));
+            return path2fh(fd.fd(), path, 0).toInode();
         }
     }
 
@@ -172,7 +172,7 @@ public class LocalVFS implements VirtualFileSystem {
                 }
 
                 String name = dirent.getName();
-                Inode fInode = toInode(path2fh(fd.fd(), name, 0));
+                Inode fInode = path2fh(fd.fd(), name, 0).toInode();
                 Stat stat = getattr(fInode);
                 list.add(new DirectoryEntry(name, fInode, stat));
             }
@@ -416,29 +416,10 @@ public class LocalVFS implements VirtualFileSystem {
     }
 
     private RawFd inode2fd(Inode inode, int flags) throws IOException {
-        KernelFileHandle fh = toKernelFh(inode);
+        KernelFileHandle fh = new KernelFileHandle(runtime, rootFh.handleType, inode);
         int fd = sysVfs.open_by_handle_at(rootFd, fh, flags);
         checkError(fd >= 0);
         return new RawFd(fd);
-    }
-
-    private KernelFileHandle toKernelFh(Inode inode) {
-        byte[] data = inode.getFileId();
-        KernelFileHandle fh = new KernelFileHandle(runtime);
-        fh.handleType.set(rootFh.handleType.intValue());
-        fh.handleBytes.set(data.length);
-        for (int i = 0; i < data.length; i++) {
-            fh.handleData[i].set(data[i]);
-        }
-        return fh;
-    }
-
-    private Inode toInode(KernelFileHandle fh) {
-        byte[] data = new byte[fh.handleBytes.intValue()];
-        for (int i = 0; i < data.length; i++) {
-            data[i] = fh.handleData[i].get();
-        }
-        return Inode.forFile(data);
     }
 
     private Stat statByFd(RawFd fd) throws IOException {

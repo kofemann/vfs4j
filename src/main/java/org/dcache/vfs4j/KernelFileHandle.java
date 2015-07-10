@@ -1,6 +1,7 @@
 package org.dcache.vfs4j;
 
 import jnr.ffi.Struct;
+import org.dcache.nfs.vfs.Inode;
 /**
  *
  * @author tigran
@@ -15,11 +16,29 @@ public class KernelFileHandle extends Struct {
         handleBytes.set(MAX_HANDLE_SZ);
     }
 
+    protected KernelFileHandle(jnr.ffi.Runtime runtime, int32_t type, Inode inode) {
+        super(runtime);
+        byte[] data = inode.getFileId();
+        handleType.set(type.get());
+        handleBytes.set(data.length);
+        for (int i = 0; i < data.length; i++) {
+            handleData[i].set(data[i]);
+        }
+    }
+
     public final u_int32_t handleBytes = new u_int32_t();
 
     public final int32_t handleType = new int32_t();
 
     public final Signed8[] handleData = array(new Signed8[MAX_HANDLE_SZ]);
+
+    Inode toInode() {
+        byte[] data = new byte[handleBytes.intValue()];
+        for (int i = 0; i < data.length; i++) {
+            data[i] = handleData[i].get();
+        }
+        return Inode.forFile(data);
+    }
 
     private final static char[] HEX = new char[]{
         '0', '1', '2', '3', '4', '5', '6', '7',
