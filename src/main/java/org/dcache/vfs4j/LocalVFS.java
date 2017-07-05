@@ -476,7 +476,7 @@ public class LocalVFS implements VirtualFileSystem {
             return _openFilesCache.get(inode);
         } catch (ExecutionException e) {
             Throwable t = e.getCause();
-            Throwables.propagateIfInstanceOf(t, IOException.class);
+            Throwables.throwIfInstanceOf(t, IOException.class);
             throw new IOException(e.getMessage(), t);
         }
     }
