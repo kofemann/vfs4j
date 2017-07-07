@@ -10,8 +10,7 @@ import com.google.common.cache.RemovalNotification;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.TreeSet;
 import java.util.concurrent.ExecutionException;
 import javax.security.auth.Subject;
 
@@ -27,6 +26,7 @@ import org.dcache.nfs.v4.SimpleIdMap;
 import org.dcache.nfs.v4.xdr.nfsace4;
 import org.dcache.nfs.vfs.AclCheckable;
 import org.dcache.nfs.vfs.DirectoryEntry;
+import org.dcache.nfs.vfs.DirectoryStream;
 import org.dcache.nfs.vfs.FsStat;
 import org.dcache.nfs.vfs.Inode;
 import org.dcache.nfs.vfs.Stat;
@@ -161,12 +161,14 @@ public class LocalVFS implements VirtualFileSystem {
     }
 
     @Override
-    public List<DirectoryEntry> list(Inode inode) throws IOException {
+    public DirectoryStream  list(Inode inode, byte[] verifier, long cookie) throws IOException {
 
-        List<DirectoryEntry> list = new ArrayList<>();
+        TreeSet<DirectoryEntry> list = new TreeSet<>();
         try (SystemFd fd = inode2fd(inode, O_DIRECTORY)) {
             Address p = sysVfs.fdopendir(fd.fd());
             checkError(p != null);
+
+            sysVfs.seekdir(p, cookie);
 
             while (true) {
                 Dirent dirent = sysVfs.readdir(p);
@@ -178,10 +180,15 @@ public class LocalVFS implements VirtualFileSystem {
                 String name = dirent.getName();
                 Inode fInode = path2fh(fd.fd(), name, 0).toInode();
                 Stat stat = getattr(fInode);
-                list.add(new DirectoryEntry(name, fInode, stat));
+                list.add(new DirectoryEntry(name, fInode, stat, dirent.d_off.longValue()));
             }
         }
-        return list;
+        return new DirectoryStream(DirectoryStream.ZERO_VERIFIER, list);
+    }
+
+    @Override
+    public byte[] directoryVerifier(Inode inode) throws IOException {
+        return DirectoryStream.ZERO_VERIFIER;
     }
 
     @Override

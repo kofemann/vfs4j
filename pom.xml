@@ -52,7 +52,7 @@
         <dependency>
             <groupId>org.dcache</groupId>
             <artifactId>nfs4j-core</artifactId>
-            <version>0.14.2</version>
+            <version>0.15.0</version>
         </dependency>
 
         <dependency>
