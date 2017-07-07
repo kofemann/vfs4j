@@ -500,6 +500,8 @@ public class LocalVFS implements VirtualFileSystem {
 
         int closedir(@In Address dirp);
 
+        void seekdir(@In Address dirp, long offset);
+
         Dirent readdir(@In @Out Address dirp);
 
         int readlinkat(int fd, CharSequence path, @Out byte[] buf, int len);
