@@ -6,14 +6,12 @@ import org.dcache.nfs.v3.NfsServerV3;
 import org.dcache.nfs.v4.DeviceManager;
 import org.dcache.nfs.v4.MDSOperationFactory;
 import org.dcache.nfs.v4.NFSServerV41;
-import org.dcache.nfs.v4.SimpleIdMap;
 import org.dcache.nfs.v4.xdr.nfs4_prot;
 import org.dcache.nfs.vfs.VirtualFileSystem;
 import org.dcache.xdr.OncRpcProgram;
 import org.dcache.xdr.OncRpcSvc;
 import org.dcache.xdr.OncRpcSvcBuilder;
 
-import java.net.URL;
 import java.io.File;
 
 public class NfsMain {
