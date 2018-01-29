@@ -48,7 +48,7 @@ public class NfsMain {
         nfsSvc.register(new OncRpcProgram(nfs4_prot.NFS4_PROGRAM, nfs4_prot.NFS_V4), nfs4);
         nfsSvc.start();
 
-        System.in.read();
+        Thread.currentThread().join();
     }
 }
 
