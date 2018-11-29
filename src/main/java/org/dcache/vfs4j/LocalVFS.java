@@ -419,6 +419,8 @@ public class LocalVFS implements VirtualFileSystem {
                 throw new NotEmptyException(msg);
             case EEXIST:
                 throw new ExistException(msg);
+            case ESTALE:
+                throw new StaleException(msg);
             default:
                 IOException t = new ServerFaultException(msg);
                 LOG.error("unhandled exception ", t);
