@@ -1,70 +1,59 @@
 package org.dcache.vfs4j;
 
-import jnr.ffi.Struct;
+import com.google.common.io.BaseEncoding;
+
+import java.util.Arrays;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+
 import org.dcache.nfs.vfs.Inode;
+import org.dcache.oncrpc4j.util.Bytes;
+
+import static com.google.common.base.Preconditions.checkArgument;
+
 /**
  *
- * @author tigran
  */
-public class KernelFileHandle extends Struct {
+public class KernelFileHandle {
 
     // stolen from /usr/include/bits/fcntl-linux.h
     public final static int MAX_HANDLE_SZ = 128;
 
-    protected KernelFileHandle(jnr.ffi.Runtime runtime) {
-        super(runtime);
-        handleBytes.set(MAX_HANDLE_SZ);
+    private final byte[] handleData;
+    private final int type;
+
+    protected KernelFileHandle(byte[] bytes) {
+
+        checkArgument(bytes.length >= 8);
+        int len = ByteBuffer.wrap(bytes).order(ByteOrder.nativeOrder()).getInt(0);
+        type = Bytes.getInt(bytes, 4);
+        handleData = Arrays.copyOfRange(bytes, 8, 8 + len);
     }
 
-    protected KernelFileHandle(jnr.ffi.Runtime runtime, int32_t type, Inode inode) {
-        super(runtime);
-        byte[] data = inode.getFileId();
-        handleType.set(type.get());
-        handleBytes.set(data.length);
-        for (int i = 0; i < data.length; i++) {
-            handleData[i].set(data[i]);
-        }
+    protected KernelFileHandle(int type, Inode inode) {
+        this.type = type;
+        handleData = inode.getFileId();
     }
 
-    public final u_int32_t handleBytes = new u_int32_t();
+    int getType() {
+        return type;
+    }
 
-    public final int32_t handleType = new int32_t();
-
-    public final Signed8[] handleData = array(new Signed8[MAX_HANDLE_SZ]);
+    byte[] toBytes() {
+        byte[] bytes = new byte[8+handleData.length];
+        ByteBuffer.wrap(bytes).order(ByteOrder.nativeOrder()).putInt(0, handleData.length);
+        Bytes.putInt(bytes, 4, type);
+        System.arraycopy(handleData, 0, bytes, 8, handleData.length);
+        return bytes;
+    }
 
     Inode toInode() {
-        byte[] data = new byte[handleBytes.intValue()];
-        for (int i = 0; i < data.length; i++) {
-            data[i] = handleData[i].get();
-        }
-        return Inode.forFile(data);
+        return Inode.forFile(handleData);
     }
 
-    private final static char[] HEX = new char[]{
-        '0', '1', '2', '3', '4', '5', '6', '7',
-        '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'
-    };
-
-    /**
-     * Returns a hexadecimal representation of given byte array.
-     *
-     * @param bytes whose string representation to return
-     * @return a string representation of <tt>bytes</tt>
-     */
-    public static java.lang.String toHexString(Signed8[] bytes, int len) {
-
-        char[] chars = new char[bytes.length * 2];
-        int p = 0;
-        for (int i = 0; i < len; i++) {
-            int b = bytes[i].get() & 0xff;
-            chars[p++] = HEX[b / 16];
-            chars[p++] = HEX[b % 16];
-        }
-        return new java.lang.String(chars);
-    }
-
+    @Override
     public java.lang.String toString() {
-        return "[" + toHexString(handleData, handleBytes.intValue()) + "],"
-                + " len = " + handleBytes.intValue() + ", type = " + handleType.intValue();
+        return "[" + BaseEncoding.base16().lowerCase().encode(handleData) + "],"
+                + " len = " + handleData.length;
     }
 }

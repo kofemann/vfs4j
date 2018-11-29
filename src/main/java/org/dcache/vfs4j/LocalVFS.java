@@ -10,6 +10,8 @@ import com.google.common.cache.RemovalNotification;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.TreeSet;
 import java.util.concurrent.ExecutionException;
 import javax.security.auth.Subject;
@@ -64,7 +66,6 @@ public class LocalVFS implements VirtualFileSystem {
 
     private final KernelFileHandle rootFh;
     private final int rootFd;
-    private final int mountId;
 
     private final NfsIdMapping idMapper = new SimpleIdMap();
 
@@ -82,19 +83,13 @@ public class LocalVFS implements VirtualFileSystem {
 
         rootFd = sysVfs.open(root.getAbsolutePath(), O_DIRECTORY, O_RDONLY);
         checkError(rootFd >= 0);
-        rootFh = new KernelFileHandle(runtime);
 
-        int[] mntId = new int[1];
-        int rc = sysVfs.name_to_handle_at(rootFd, "", rootFh, mntId, AT_EMPTY_PATH);
-        checkError(rc == 0);
-        mountId = mntId[0];
+        rootFh = path2fh(rootFd, "", AT_EMPTY_PATH);
 
         _openFilesCache =  CacheBuilder.newBuilder()
                 .maximumSize(1024)
                 .removalListener( new FileCloser())
                 .build( new FileOpenner() );
-
-        LOG.debug("handle  =  {}, mountid = {}", rootFh, mountId);
     }
 
     @Override
@@ -386,11 +381,12 @@ public class LocalVFS implements VirtualFileSystem {
      */
     private KernelFileHandle path2fh(int fd, String path, int flags) throws IOException {
 
-        KernelFileHandle fh = new KernelFileHandle(runtime);
-
         int[] mntId = new int[1];
-        int rc = sysVfs.name_to_handle_at(fd, path, fh, mntId, flags);
+        byte[] bytes = new byte[KernelFileHandle.MAX_HANDLE_SZ];
+        ByteBuffer.wrap(bytes).order(ByteOrder.nativeOrder()).putInt(0, bytes.length);
+        int rc = sysVfs.name_to_handle_at(fd, path, bytes, mntId, flags);
         checkError(rc == 0);
+        KernelFileHandle fh = new KernelFileHandle(bytes);
         LOG.debug("path = [{}], handle = {}", path, fh);
         return fh;
     }
@@ -429,8 +425,8 @@ public class LocalVFS implements VirtualFileSystem {
     }
 
     private SystemFd inode2fd(Inode inode, int flags) throws IOException {
-        KernelFileHandle fh = new KernelFileHandle(runtime, rootFh.handleType, inode);
-        int fd = sysVfs.open_by_handle_at(rootFd, fh, flags);
+        KernelFileHandle fh = new KernelFileHandle(rootFh.getType(), inode);
+        int fd = sysVfs.open_by_handle_at(rootFd, fh.toBytes(), flags);
         checkError(fd >= 0);
         return new SystemFd(fd);
     }
@@ -499,9 +495,9 @@ public class LocalVFS implements VirtualFileSystem {
 
         int openat(int dirfd, CharSequence name, int flags, int mode);
 
-        int name_to_handle_at(int fd, CharSequence name, @Out @In KernelFileHandle fh, @Out int[] mntId, int flag);
+        int name_to_handle_at(int fd, CharSequence name, @Out @In byte[] fh, @Out int[] mntId, int flag);
 
-        int open_by_handle_at(int mount_fd, @In KernelFileHandle fh, int flags);
+        int open_by_handle_at(int mount_fd, @In byte[] fh, int flags);
 
         int __fxstat64(int version, int fd, @Transient @Out FileStat fileStat);
 
