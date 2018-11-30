@@ -317,6 +317,10 @@ public class LocalVFS implements VirtualFileSystem {
             openMode = O_PATH | O_RDWR | O_NOFOLLOW;
         }
 
+        if (stat.isDefined(Stat.StatAttribute.SIZE)) {
+            openMode |= O_RDWR;
+        }
+
         try (SystemFd fd = inode2fd(inode, openMode)) {
             int uid = -1;
             int gid = -1;
