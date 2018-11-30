@@ -425,7 +425,7 @@ public class LocalVFS implements VirtualFileSystem {
     }
 
     private SystemFd inode2fd(Inode inode, int flags) throws IOException {
-        KernelFileHandle fh = new KernelFileHandle(rootFh.getType(), inode);
+        KernelFileHandle fh = new KernelFileHandle(inode);
         int fd = sysVfs.open_by_handle_at(rootFd, fh.toBytes(), flags);
         checkError(fd >= 0);
         return new SystemFd(fd);
