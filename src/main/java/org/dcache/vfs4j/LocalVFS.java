@@ -314,6 +314,9 @@ public class LocalVFS implements VirtualFileSystem {
 
         Stat currentStat = getattr(inode);
         if (currentStat.type() == Stat.Type.SYMLINK) {
+            if (stat.isDefined(Stat.StatAttribute.SIZE)) {
+                throw new InvalException("Can't chage size of a symlink");
+            }
             openMode = O_PATH | O_RDWR | O_NOFOLLOW;
         }
 
@@ -344,11 +347,11 @@ public class LocalVFS implements VirtualFileSystem {
                     rc = sysVfs.fchmod(fd.fd(), stat.getMode());
                     checkError(rc == 0);
                 }
+            }
 
-                if (stat.isDefined(Stat.StatAttribute.SIZE)) {
-                    rc = sysVfs.ftruncate(fd.fd(), stat.getSize());
-                    checkError(rc == 0);
-                }
+            if (stat.isDefined(Stat.StatAttribute.SIZE)) {
+                rc = sysVfs.ftruncate(fd.fd(), stat.getSize());
+                checkError(rc == 0);
             }
         }
     }
