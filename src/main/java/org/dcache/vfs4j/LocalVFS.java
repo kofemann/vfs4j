@@ -311,8 +311,10 @@ public class LocalVFS implements VirtualFileSystem {
     public void setattr(Inode inode, Stat stat) throws IOException {
 
         int openMode = O_RDONLY;
-        if (stat.isDefined(Stat.StatAttribute.SIZE)) {
-            openMode |= O_RDWR;
+
+        Stat currentStat = getattr(inode);
+        if (currentStat.type() == Stat.Type.SYMLINK) {
+            openMode = O_PATH | O_RDWR | O_NOFOLLOW;
         }
 
         try (SystemFd fd = inode2fd(inode, openMode)) {
@@ -333,14 +335,16 @@ public class LocalVFS implements VirtualFileSystem {
                 checkError(rc == 0);
             }
 
-            if (stat.isDefined(Stat.StatAttribute.MODE)) {
-                rc = sysVfs.fchmod(fd.fd(), stat.getMode());
-                checkError(rc == 0);
-            }
+            if (currentStat.type() != Stat.Type.SYMLINK) {
+                if (stat.isDefined(Stat.StatAttribute.MODE)) {
+                    rc = sysVfs.fchmod(fd.fd(), stat.getMode());
+                    checkError(rc == 0);
+                }
 
-            if (stat.isDefined(Stat.StatAttribute.SIZE)) {
-                rc = sysVfs.ftruncate(fd.fd(), stat.getSize());
-                checkError(rc == 0);
+                if (stat.isDefined(Stat.StatAttribute.SIZE)) {
+                    rc = sysVfs.ftruncate(fd.fd(), stat.getSize());
+                    checkError(rc == 0);
+                }
             }
         }
     }
