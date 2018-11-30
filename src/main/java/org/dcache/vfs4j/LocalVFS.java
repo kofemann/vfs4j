@@ -427,6 +427,10 @@ public class LocalVFS implements VirtualFileSystem {
                 throw new StaleException(msg);
             case EINVAL:
                 throw new InvalException(msg);
+            case ENOTSUP:
+                throw new NotSuppException(msg);
+            case ENXIO:
+                throw new NXioException(msg);
             default:
                 IOException t = new ServerFaultException(msg);
                 LOG.error("unhandled exception ", t);
