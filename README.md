@@ -2,7 +2,7 @@ VFS4J
 =====
 
 An implementation of nfs4j's VirtualFileSystem interface
-which is based on Linux's open-by-hadle API.
+which is based on Linux's open-by-handle API.
 
 
 Usage
