@@ -3,7 +3,7 @@ package org.dcache.vfs4j;
 import org.dcache.nfs.ExportFile;
 import org.dcache.nfs.v3.MountServer;
 import org.dcache.nfs.v3.NfsServerV3;
-import org.dcache.nfs.v4.MDSOperationFactory;
+import org.dcache.nfs.v4.MDSOperationExecutor;
 import org.dcache.nfs.v4.NFSServerV41;
 import org.dcache.nfs.v4.xdr.nfs4_prot;
 import org.dcache.nfs.vfs.VirtualFileSystem;
@@ -33,9 +33,9 @@ public class NfsMain {
         ExportFile exportFile = new ExportFile( new File(args[1]));
 
         NFSServerV41 nfs4 = new NFSServerV41.Builder()
-                .withExportFile(exportFile)
+                .withExportTable(exportFile)
                 .withVfs(vfs)
-                .withOperationFactory(new MDSOperationFactory())
+                .withOperationExecutor(new MDSOperationExecutor())
                 .build();
 
         NfsServerV3 nfs3 = new NfsServerV3(exportFile, vfs);
