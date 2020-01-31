@@ -172,7 +172,7 @@ public class LocalVFS implements VirtualFileSystem {
                     break;
                 }
 
-                String name = dirent.getName();
+                String name = dirent.d_name.get();
                 Inode fInode = path2fh(fd.fd(), name, 0).toInode();
                 Stat stat = getattr(fInode);
                 list.add(new DirectoryEntry(name, fInode, stat, dirent.d_off.longValue()));
