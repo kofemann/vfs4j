@@ -7,14 +7,26 @@
     <packaging>jar</packaging>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.source>1.8</maven.compiler.source>
-        <maven.compiler.target>1.8</maven.compiler.target>
-        <maven.compiler.showWarnings>true</maven.compiler.showWarnings>
-        <maven.compiler.showDeprecation>true</maven.compiler.showDeprecation>
+        <java.version>11</java.version>
     </properties>
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.8.0</version>
+                <configuration>
+                    <showDeprecation>true</showDeprecation>
+                    <encoding>UTF-8</encoding>
+                    <release>${java.verson}</release>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                     <!-- without forking compilation happens in the
+                         same process, so no arguments are applied -->
+                    <fork>true</fork>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-assembly-plugin</artifactId>
