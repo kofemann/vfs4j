@@ -12,6 +12,9 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.TreeSet;
 import java.util.concurrent.ExecutionException;
 import javax.security.auth.Subject;
@@ -45,6 +48,8 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 public class LocalVFS implements VirtualFileSystem {
 
     private final Logger LOG = LoggerFactory.getLogger(LocalVFS.class);
+
+    private static final String XATTR_PREFIX = "user.";
 
     // stolen from /usr/include/bits/fcntl-linux.h
     private final static int O_DIRECTORY = 0200000;
@@ -381,6 +386,73 @@ public class LocalVFS implements VirtualFileSystem {
         return idMapper;
     }
 
+
+    private int findByte(byte[] buf, byte b, int offset) {
+
+        for (int i = offset; i < buf.length; i++) {
+            if (buf[i] == b) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /*
+     * only user attribute are supported. Adjust the name is required.
+     */
+    private final String toXattrName(String s) {
+        return s.startsWith(XATTR_PREFIX) ? s : XATTR_PREFIX + s;
+    }
+
+    @Override
+    public String[] listXattrs(Inode inode) throws IOException {
+        byte[] out = new byte[1024];
+        List<String> list = new ArrayList<>();
+        try (SystemFd fd = inode2fd(inode, O_NOFOLLOW)) {
+
+            int rc = sysVfs.flistxattr(fd.fd(), out, out.length);
+            checkError(rc >= 0);
+
+            for(int i = 0; i < rc; ) {
+                int index = findByte(out, (byte)'\0', i);
+                if (index < 0) {
+                    break;
+                }
+                list.add(new String(out, i, index - i, UTF_8));
+                i = index + 1;
+            }
+            return list.toArray(new String[0]);
+        }
+    }
+
+    @Override
+    public byte[] getXattr(Inode inode, String name) throws IOException {
+        byte[] out = new byte[64*1024];
+
+        try (SystemFd fd = inode2fd(inode, O_NOFOLLOW)) {
+
+            int rc = sysVfs.fgetxattr(fd.fd(), toXattrName(name), out, out.length);
+            checkError(rc >= 0);
+            return Arrays.copyOf(out, rc);
+        }
+    }
+
+    @Override
+    public void setXattr(Inode inode, String attr, byte[] value, SetXattrMode mode) throws IOException {
+        try (SystemFd fd = inode2fd(inode, O_NOFOLLOW)) {
+            int rc = sysVfs.fsetxattr(fd.fd(), toXattrName(attr), value, value.length, 0);
+            checkError(rc == 0);
+        }
+    }
+
+    @Override
+    public void removeXattr(Inode inode, String attr) throws IOException {
+        try (SystemFd fd = inode2fd(inode, O_NOFOLLOW)) {
+            int rc = sysVfs.fremovexattr(fd.fd(), toXattrName(attr));
+            checkError(rc == 0);
+        }
+    }
+
     /**
      * Lookup file handle by path
      *
@@ -555,6 +627,14 @@ public class LocalVFS implements VirtualFileSystem {
         int symlinkat(CharSequence target, int newdirfd, CharSequence linkpath);
 
         int linkat(int fd1, CharSequence path1, int fd2, CharSequence path2, int flag);
+
+        int flistxattr(int fd, @Out byte[] buf, int size);
+
+        int fgetxattr(int fd, CharSequence name, @Out byte[] buf, int size);
+
+        int fsetxattr(int fd, CharSequence name, @In byte[] buf, int size, int flags);
+
+        int fremovexattr(int fd, CharSequence name);
     }
 
     /**
