@@ -506,6 +506,9 @@ public class LocalVFS implements VirtualFileSystem {
                 throw new NotSuppException(msg);
             case ENXIO:
                 throw new NXioException(msg);
+            case ENODATA:
+                // FIXME: currently we assume that only xattr related calls return ENODATA
+                throw new NoXattrException(msg);
             default:
                 IOException t = new ServerFaultException(msg);
                 LOG.error("unhandled exception ", t);
