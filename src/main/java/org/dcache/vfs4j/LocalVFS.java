@@ -439,8 +439,24 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public void setXattr(Inode inode, String attr, byte[] value, SetXattrMode mode) throws IOException {
+
+        int flag;
+        switch (mode) {
+            case EITHER:
+                flag = 0;
+                break;
+            case CREATE:
+                flag = 1;
+                break;
+            case REPLACE:
+                flag = 2;
+                break;
+            default:
+                throw new RuntimeException("never get here");
+        }
+
         try (SystemFd fd = inode2fd(inode, O_NOFOLLOW)) {
-            int rc = sysVfs.fsetxattr(fd.fd(), toXattrName(attr), value, value.length, 0);
+            int rc = sysVfs.fsetxattr(fd.fd(), toXattrName(attr), value, value.length, flag);
             checkError(rc == 0);
         }
     }
