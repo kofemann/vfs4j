@@ -386,6 +386,15 @@ public class LocalVFS implements VirtualFileSystem {
         return idMapper;
     }
 
+    @Override
+    public boolean getCaseInsensitive() {
+        return true;
+    }
+
+    @Override
+    public boolean getCasePreserving() {
+        return true;
+    }
 
     private int findByte(byte[] buf, byte b, int offset) {
 
