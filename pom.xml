@@ -20,7 +20,7 @@
                 <configuration>
                     <showDeprecation>true</showDeprecation>
                     <encoding>UTF-8</encoding>
-                    <release>${java.verson}</release>
+                    <release>${java.version}</release>
                     <source>${java.version}</source>
                     <target>${java.version}</target>
                      <!-- without forking compilation happens in the
