@@ -66,11 +66,11 @@ public class LocalVFS implements VirtualFileSystem {
     private final static int AT_REMOVEDIR = 0x200;
     private final static int AT_EMPTY_PATH = 0x1000;
 
-    private final SysVfs sysVfs;
+    protected final SysVfs sysVfs;
     private final jnr.ffi.Runtime runtime;
 
     private final KernelFileHandle rootFh;
-    private final int rootFd;
+    protected final int rootFd;
 
     private final NfsIdMapping idMapper = new SimpleIdMap();
 
@@ -499,7 +499,7 @@ public class LocalVFS implements VirtualFileSystem {
         return fh;
     }
 
-    private void checkError(boolean condition) throws IOException {
+    protected void checkError(boolean condition) throws IOException {
 
         if (condition) {
             return;
@@ -609,6 +609,8 @@ public class LocalVFS implements VirtualFileSystem {
         String strerror(int e);
 
         int open(CharSequence path, int flags, int mode);
+
+        int ioctl(int fd, int request, @Out @In byte[] fh);
 
         int openat(int dirfd, CharSequence name, int flags, int mode);
 
