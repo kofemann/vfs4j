@@ -227,10 +227,17 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public int read(Inode inode, byte[] data, long offset, int count) throws IOException {
+        return read(inode, ByteBuffer.wrap(data, 0, count), offset);
+    }
+
+    @Override
+    public int read(Inode inode, ByteBuffer data, long offset) throws IOException {
         SystemFd fd = getOfLoadRawFd(inode);
-        int rc = sysVfs.pread(fd.fd(), data, count, offset);
-        checkError(rc >= 0);
-        return rc;
+        int n = sysVfs.pread(fd.fd(), data, data.remaining(), offset);
+        checkError(n >= 0);
+        // JNI interface does not updates the position
+        data.position( data.position() + n);
+        return n;
     }
 
     @Override
@@ -277,9 +284,18 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public WriteResult write(Inode inode, byte[] data, long offset, int count, StabilityLevel stabilityLevel) throws IOException {
+        return write(inode, ByteBuffer.wrap(data, 0, count), offset, stabilityLevel);
+    }
+
+    @Override
+    public WriteResult write(Inode inode, ByteBuffer data, long offset, StabilityLevel stabilityLevel) throws IOException {
         SystemFd fd = getOfLoadRawFd(inode);
-        int n = sysVfs.pwrite(fd.fd(), data, count, offset);
+        int n = sysVfs.pwrite(fd.fd(), data, data.remaining(), offset);
         checkError(n >= 0);
+
+        // JNI interface does not updates the position
+        data.position( data.position() + n);
+
 
         int rc = 0;
         switch (stabilityLevel) {
@@ -642,9 +658,9 @@ public class LocalVFS implements VirtualFileSystem {
 
         int ftruncate(int fildes, long length);
 
-        int pread(int fd, @Out byte[] buf, int nbyte, long offset);
+        int pread(int fd, @Out ByteBuffer buf, int nbyte, long offset);
 
-        int pwrite(int fd, @In byte[] buf, int nbyte, long offset);
+        int pwrite(int fd, @In ByteBuffer buf, int nbyte, long offset);
 
         int fsync(int fd);
 
