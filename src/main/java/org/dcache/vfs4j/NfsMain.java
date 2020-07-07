@@ -15,39 +15,40 @@ import java.io.File;
 
 public class NfsMain {
 
-    public static void main(String[] args) throws Exception {
+  public static void main(String[] args) throws Exception {
 
-        if (args.length != 2) {
-            System.err.println("Usage: NfsMain <path> <export file>");
-            System.exit(1);
-        }
-
-        VirtualFileSystem vfs = new LocalVFS( new File(args[0]));
-        OncRpcSvc nfsSvc = new OncRpcSvcBuilder()
-                .withPort(2049)
-                .withTCP()
-                .withAutoPublish()
-                .withWorkerThreadIoStrategy()
-                .build();
-
-        ExportFile exportFile = new ExportFile( new File(args[1]));
-
-        NFSServerV41 nfs4 = new NFSServerV41.Builder()
-                .withExportTable(exportFile)
-                .withVfs(vfs)
-                .withOperationExecutor(new MDSOperationExecutor())
-                .build();
-
-        NfsServerV3 nfs3 = new NfsServerV3(exportFile, vfs);
-        MountServer mountd = new MountServer(exportFile, vfs);
-
-        nfsSvc.register(new OncRpcProgram(100003, 3), nfs3);
-        nfsSvc.register(new OncRpcProgram(100005, 3), mountd);
-
-        nfsSvc.register(new OncRpcProgram(nfs4_prot.NFS4_PROGRAM, nfs4_prot.NFS_V4), nfs4);
-        nfsSvc.start();
-
-        Thread.currentThread().join();
+    if (args.length != 2) {
+      System.err.println("Usage: NfsMain <path> <export file>");
+      System.exit(1);
     }
-}
 
+    VirtualFileSystem vfs = new LocalVFS(new File(args[0]));
+    OncRpcSvc nfsSvc =
+        new OncRpcSvcBuilder()
+            .withPort(2049)
+            .withTCP()
+            .withAutoPublish()
+            .withWorkerThreadIoStrategy()
+            .build();
+
+    ExportFile exportFile = new ExportFile(new File(args[1]));
+
+    NFSServerV41 nfs4 =
+        new NFSServerV41.Builder()
+            .withExportTable(exportFile)
+            .withVfs(vfs)
+            .withOperationExecutor(new MDSOperationExecutor())
+            .build();
+
+    NfsServerV3 nfs3 = new NfsServerV3(exportFile, vfs);
+    MountServer mountd = new MountServer(exportFile, vfs);
+
+    nfsSvc.register(new OncRpcProgram(100003, 3), nfs3);
+    nfsSvc.register(new OncRpcProgram(100005, 3), mountd);
+
+    nfsSvc.register(new OncRpcProgram(nfs4_prot.NFS4_PROGRAM, nfs4_prot.NFS_V4), nfs4);
+    nfsSvc.start();
+
+    Thread.currentThread().join();
+  }
+}
