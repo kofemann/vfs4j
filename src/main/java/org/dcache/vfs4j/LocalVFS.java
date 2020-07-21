@@ -218,6 +218,10 @@ public class LocalVFS implements VirtualFileSystem {
 
   @Override
   public Inode parentOf(Inode inode) throws IOException {
+    // avoid lookup behind the exported root
+    if (Arrays.equals(inode.getFileId(), rootFh.toBytes())) {
+      throw new NoEntException();
+    }
     return lookup(inode, "..");
   }
 
