@@ -19,6 +19,7 @@ import java.util.TreeSet;
 import java.util.concurrent.ExecutionException;
 import javax.security.auth.Subject;
 
+import jnr.ffi.byref.LongLongByReference;
 import jnr.ffi.provider.FFIProvider;
 import jnr.constants.platform.Errno;
 import jnr.ffi.Address;
@@ -103,20 +104,34 @@ public class LocalVFS implements VirtualFileSystem {
     int uid = (int) Subjects.getUid(subject);
     int gid = (int) Subjects.getPrimaryGid(subject);
 
-    if (type != Stat.Type.REGULAR) {
+    if (type == Stat.Type.DIRECTORY) {
       throw new NotSuppException("create of this type not supported");
     }
 
     try (SystemFd fd = inode2fd(parent, O_NOFOLLOW | O_DIRECTORY)) {
-      int rfd = sysVfs.openat(fd.fd(), path, O_EXCL | O_CREAT | O_RDWR, mode);
-      checkError(rfd >= 0);
-      int rc = sysVfs.fchownat(rfd, "", uid, gid, AT_EMPTY_PATH);
-      checkError(rc == 0);
 
-      KernelFileHandle fh = path2fh(rfd, "", AT_EMPTY_PATH);
-      Inode inode = fh.toInode();
-      _openFilesCache.put(inode, new SystemFd(rfd));
-      return inode;
+      int rc;
+      if (type == Stat.Type.REGULAR) {
+        int rfd = sysVfs.openat(fd.fd(), path, O_EXCL | O_CREAT | O_RDWR, mode);
+        checkError(rfd >= 0);
+        rc = sysVfs.fchownat(rfd, "", uid, gid, AT_EMPTY_PATH);
+        checkError(rc == 0);
+
+        Inode inode = path2fh(rfd, "", AT_EMPTY_PATH).toInode();
+        _openFilesCache.put(inode, new SystemFd(rfd));
+        return inode;
+
+      } else {
+
+        // FIXME: we should get major and minor numbers from CREATE arguments.
+        // dev == (long)major << 32 | minor
+        LongLongByReference dev = new LongLongByReference(type == Stat.Type.BLOCK || type == Stat.Type.CHAR ? 1 : 0);
+        rc = sysVfs.__xmknodat(0, fd.fd(), path,  mode | type.toMode(), dev);
+        checkError(rc >= 0);
+        rc = sysVfs.fchownat(fd.fd(), path, uid, gid, 0);
+        checkError(rc >= 0);
+        return path2fh(fd.fd(), path, 0).toInode();
+      }
     }
   }
 
@@ -684,6 +699,8 @@ public class LocalVFS implements VirtualFileSystem {
     int fsetxattr(int fd, CharSequence name, @In byte[] buf, int size, int flags);
 
     int fremovexattr(int fd, CharSequence name);
+
+    int __xmknodat(int version, int fd, CharSequence name, int mode, @In @Out LongLongByReference dev);
   }
 
   /** {@link AutoCloseable} class which represents OS native file descriptor. */
