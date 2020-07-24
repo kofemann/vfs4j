@@ -656,8 +656,6 @@ public class LocalVFS implements VirtualFileSystem {
 
     Address fdopendir(int fd);
 
-    int closedir(@In Address dirp);
-
     void seekdir(@In Address dirp, long offset);
 
     Dirent readdir(@In @Out Address dirp);
