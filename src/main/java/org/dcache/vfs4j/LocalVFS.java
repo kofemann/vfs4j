@@ -26,7 +26,7 @@ import jnr.ffi.Address;
 import jnr.ffi.annotations.*;
 import org.dcache.nfs.status.*;
 
-import org.dcache.auth.Subjects;
+import org.dcache.nfs.util.UnixSubjects;
 import org.dcache.nfs.v4.NfsIdMapping;
 import org.dcache.nfs.v4.SimpleIdMap;
 import org.dcache.nfs.v4.xdr.nfsace4;
@@ -101,8 +101,8 @@ public class LocalVFS implements VirtualFileSystem {
   @Override
   public Inode create(Inode parent, Stat.Type type, String path, Subject subject, int mode)
       throws IOException {
-    int uid = (int) Subjects.getUid(subject);
-    int gid = (int) Subjects.getPrimaryGid(subject);
+    int uid = (int) UnixSubjects.getUid(subject);
+    int gid = (int) UnixSubjects.getPrimaryGid(subject);
 
     if (type == Stat.Type.DIRECTORY) {
       throw new NotSuppException("create of this type not supported");
@@ -204,8 +204,8 @@ public class LocalVFS implements VirtualFileSystem {
 
   @Override
   public Inode mkdir(Inode parent, String path, Subject subject, int mode) throws IOException {
-    int uid = (int) Subjects.getUid(subject);
-    int gid = (int) Subjects.getPrimaryGid(subject);
+    int uid = (int) UnixSubjects.getUid(subject);
+    int gid = (int) UnixSubjects.getPrimaryGid(subject);
 
     Inode inode;
     try (SystemFd fd = inode2fd(parent, O_PATH | O_NOFOLLOW | O_DIRECTORY)) {
@@ -280,8 +280,8 @@ public class LocalVFS implements VirtualFileSystem {
   @Override
   public Inode symlink(Inode parent, String path, String link, Subject subject, int mode)
       throws IOException {
-    int uid = (int) Subjects.getUid(subject);
-    int gid = (int) Subjects.getPrimaryGid(subject);
+    int uid = (int) UnixSubjects.getUid(subject);
+    int gid = (int) UnixSubjects.getPrimaryGid(subject);
 
     try (SystemFd fd = inode2fd(parent, O_DIRECTORY)) {
       int rc = sysVfs.symlinkat(link, fd.fd(), path);
