@@ -463,7 +463,7 @@ public class LocalVFS implements VirtualFileSystem {
         list.add(new String(out, i, index - i, UTF_8));
         i = index + 1;
       }
-      return list.toArray(new String[0]);
+      return list.toArray(String[]::new);
     }
   }
 
