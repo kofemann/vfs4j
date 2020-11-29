@@ -353,7 +353,7 @@ public class LocalVFS implements VirtualFileSystem {
     Stat currentStat = getattr(inode);
     if (currentStat.type() == Stat.Type.SYMLINK) {
       if (stat.isDefined(Stat.StatAttribute.SIZE)) {
-        throw new InvalException("Can't chage size of a symlink");
+        throw new InvalException("Can't change size of a symlink");
       }
       openMode = O_PATH | O_RDWR | O_NOFOLLOW;
     }
