@@ -1,6 +1,7 @@
 package org.dcache.vfs4j;
 
 import org.dcache.nfs.ExportFile;
+import org.dcache.nfs.ExportTable;
 import org.dcache.nfs.v3.MountServer;
 import org.dcache.nfs.v3.NfsServerV3;
 import org.dcache.nfs.v4.MDSOperationExecutor;
@@ -31,7 +32,7 @@ public class NfsMain {
             .withWorkerThreadIoStrategy()
             .build();
 
-    ExportFile exportFile = new ExportFile(new File(args[1]));
+    ExportTable exportFile = new ExportFile(new File(args[1]));
 
     NFSServerV41 nfs4 =
         new NFSServerV41.Builder()
