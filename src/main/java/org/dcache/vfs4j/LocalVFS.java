@@ -17,6 +17,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.TreeSet;
 import java.util.concurrent.ExecutionException;
+import javax.annotation.Nonnull;
 import javax.security.auth.Subject;
 
 import jnr.ffi.byref.LongLongByReference;
@@ -621,7 +622,7 @@ public class LocalVFS implements VirtualFileSystem {
   private class FileOpenner extends CacheLoader<Inode, SystemFd> {
 
     @Override
-    public SystemFd load(Inode key) throws Exception {
+    public SystemFd load(@Nonnull Inode key) throws Exception {
       return inode2fd(key, O_NOFOLLOW | O_RDWR);
     }
   }
