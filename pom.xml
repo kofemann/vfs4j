@@ -45,7 +45,7 @@
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <manifestEntries>
                                         <Main-Class>org.dcache.vfs4j.NfsMain</Main-Class>
-                                        <Implementation-Build>${buildNumber}</Implementation-Build>
+                                        <version>${project.version}</version>
                                         <url>${project.url}</url>
                                         <Build-Time>${maven.build.timestamp}</Build-Time>
                                     </manifestEntries>
