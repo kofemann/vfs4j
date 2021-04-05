@@ -10,6 +10,8 @@ import com.google.common.cache.RemovalNotification;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodType;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
@@ -20,6 +22,11 @@ import java.util.concurrent.ExecutionException;
 import javax.annotation.Nonnull;
 import javax.security.auth.Subject;
 
+import jdk.incubator.foreign.CLinker;
+import jdk.incubator.foreign.FunctionDescriptor;
+import jdk.incubator.foreign.LibraryLookup;
+import jdk.incubator.foreign.MemoryAddress;
+import jdk.incubator.foreign.MemorySegment;
 import jnr.ffi.byref.LongLongByReference;
 import jnr.ffi.provider.FFIProvider;
 import jnr.constants.platform.Errno;
@@ -76,12 +83,38 @@ public class LocalVFS implements VirtualFileSystem {
   /** Cache of opened files used by read/write operations. */
   private final LoadingCache<Inode, SystemFd> _openFilesCache;
 
+  // handles to native functions;
+  private MethodHandle fErrono;
+  private MethodHandle fOpen;
+  private MethodHandle fOpenAt;
+
   public LocalVFS(File root) throws IOException {
 
     sysVfs = FFIProvider.getSystemProvider().createLibraryLoader(SysVfs.class).load("c");
     runtime = jnr.ffi.Runtime.getRuntime(sysVfs);
 
-    rootFd = sysVfs.open(root.getAbsolutePath(), O_DIRECTORY, O_RDONLY);
+    fErrono = CLinker.getInstance()
+            .downcallHandle(
+                    LibraryLookup.ofDefault().lookup("strerror").get().address(),
+                    MethodType.methodType(MemoryAddress.class, int.class),
+                    FunctionDescriptor.of(CLinker.C_POINTER, CLinker.C_INT)
+            );
+
+    fOpen = CLinker.getInstance()
+            .downcallHandle(
+                    LibraryLookup.ofDefault().lookup("open").get().address(),
+                    MethodType.methodType(int.class, MemoryAddress.class, int.class, int.class),
+                    FunctionDescriptor.of(CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT, CLinker.C_INT)
+            );
+
+    fOpenAt = CLinker.getInstance()
+            .downcallHandle(
+                    LibraryLookup.ofDefault().lookup("openat").get().address(),
+                    MethodType.methodType(int.class, int.class,  MemoryAddress.class, int.class, int.class),
+                    FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT, CLinker.C_INT)
+            );
+
+    rootFd = open(root.getAbsolutePath(), O_DIRECTORY, O_RDONLY);
     checkError(rootFd >= 0);
 
     rootFh = path2fh(rootFd, "", AT_EMPTY_PATH);
@@ -113,7 +146,7 @@ public class LocalVFS implements VirtualFileSystem {
 
       int rc;
       if (type == Stat.Type.REGULAR) {
-        int rfd = sysVfs.openat(fd.fd(), path, O_EXCL | O_CREAT | O_RDWR, mode);
+        int rfd = openat(fd.fd(), path, O_EXCL | O_CREAT | O_RDWR, mode);
         checkError(rfd >= 0);
         rc = sysVfs.fchownat(rfd, "", uid, gid, AT_EMPTY_PATH);
         checkError(rc == 0);
@@ -547,7 +580,7 @@ public class LocalVFS implements VirtualFileSystem {
 
     int errno = runtime.getLastError();
     Errno e = Errno.valueOf(errno);
-    String msg = sysVfs.strerror(errno) + " " + e.name() + "(" + errno + ")";
+    String msg = strerror(errno) + " " + e.name() + "(" + errno + ")";
     LOG.debug("Last error: {}", msg);
 
     // FIXME: currently we assume that only xattr related calls return ENODATA
@@ -635,13 +668,7 @@ public class LocalVFS implements VirtualFileSystem {
   @SuppressWarnings("PublicInnerClass")
   public interface SysVfs {
 
-    String strerror(int e);
-
-    int open(CharSequence path, int flags, int mode);
-
     int ioctl(int fd, int request, @Out @In byte[] fh);
-
-    int openat(int dirfd, CharSequence name, int flags, int mode);
 
     int name_to_handle_at(
         int fd, CharSequence name, @Out @In byte[] fh, @Out int[] mntId, int flag);
@@ -699,6 +726,34 @@ public class LocalVFS implements VirtualFileSystem {
     int copy_file_range(int fd_in, @In @Out LongLongByReference off_in,
                         int fd_out, @In @Out LongLongByReference off_out, long count, int flags);
   }
+
+
+  // FFI helpers
+  private String strerror(int errno) {
+    try {
+    MemoryAddress o = (MemoryAddress)fErrono.invokeExact(errno);
+    return CLinker.toJavaStringRestricted(o);
+    } catch (Throwable t) {
+      throw new RuntimeException(t);
+    }
+  }
+
+  private int open(String name, int flags, int mode) {
+    try(MemorySegment str = CLinker.toCString(name)){
+      return (int)fOpen.invokeExact(str.address(), flags, mode);
+    } catch (Throwable t) {
+      throw new RuntimeException(t);
+    }
+  }
+
+  private int openat(int fd, String name, int flags, int mode) {
+    try(MemorySegment str = CLinker.toCString(name)){
+      return (int)fOpenAt.invokeExact(fd, str.address(), flags, mode);
+    } catch (Throwable t) {
+      throw new RuntimeException(t);
+    }
+  }
+
 
   /** {@link AutoCloseable} class which represents OS native file descriptor. */
   private class SystemFd implements Closeable {

@@ -27,6 +27,10 @@
                      <!-- without forking compilation happens in the
                          same process, so no arguments are applied -->
                     <fork>true</fork>
+                    <compilerArgs>
+                        <arg>--add-modules</arg>
+                        <arg>jdk.incubator.foreign</arg>
+                    </compilerArgs>
                 </configuration>
             </plugin>
             <plugin>
