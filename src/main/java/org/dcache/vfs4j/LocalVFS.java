@@ -504,6 +504,20 @@ public class LocalVFS implements VirtualFileSystem {
     }
   }
 
+  @Override
+  public long copyFileRange(Inode src, long srcPos, Inode dst, long dstPos, long len)
+      throws IOException {
+
+    SystemFd fdIn = getOfLoadRawFd(src);
+    SystemFd fdDst = getOfLoadRawFd(dst);
+
+
+    int rc = sysVfs.copy_file_range(fdIn.fd(), new LongLongByReference(srcPos),
+            fdDst.fd(), new LongLongByReference(dstPos), len, 0);
+    checkError(rc >= 0);
+    return rc;
+  }
+
   /**
    * Lookup file handle by path
    *
@@ -681,6 +695,9 @@ public class LocalVFS implements VirtualFileSystem {
     int fremovexattr(int fd, CharSequence name);
 
     int __xmknodat(int version, int fd, CharSequence name, int mode, @In @Out LongLongByReference dev);
+
+    int copy_file_range(int fd_in, @In @Out LongLongByReference off_in,
+                        int fd_out, @In @Out LongLongByReference off_out, long count, int flags);
   }
 
   /** {@link AutoCloseable} class which represents OS native file descriptor. */
