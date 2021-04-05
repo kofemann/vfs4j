@@ -92,59 +92,28 @@ public class FileStat extends Struct {
   public static java.lang.String modeToString(int mode) {
     StringBuilder result = new StringBuilder(10);
     switch (mode & S_IFMT) {
-      case S_IFBLK:
-        result.append("b");
-        break;
-      case S_IFCHR:
-        result.append("c");
-        break;
-      case S_IFDIR:
-        result.append("d");
-        break;
-      case S_IFIFO:
-        result.append("p");
-        break;
-      case S_IFSOCK:
-        result.append("s");
-        break;
-      case S_IFLNK:
-        result.append("l");
-        break;
-      case S_IFREG:
-        result.append("-");
-        break;
-      default:
-        result.append("?");
+      case S_IFBLK -> result.append("b");
+      case S_IFCHR -> result.append("c");
+      case S_IFDIR -> result.append("d");
+      case S_IFIFO -> result.append("p");
+      case S_IFSOCK -> result.append("s");
+      case S_IFLNK -> result.append("l");
+      case S_IFREG -> result.append("-");
+      default -> result.append("?");
     }
 
     // owner, group, other
     for (int i = 0; i < 3; i++) {
       int acl = (mode >> (6 - 3 * i)) & 0000007;
       switch (acl) {
-        case 00:
-          result.append("---");
-          break;
-        case 01:
-          result.append("--x");
-          break;
-        case 02:
-          result.append("-w-");
-          break;
-        case 03:
-          result.append("-wx");
-          break;
-        case 04:
-          result.append("r--");
-          break;
-        case 05:
-          result.append("r-x");
-          break;
-        case 06:
-          result.append("rw-");
-          break;
-        case 07:
-          result.append("rwx");
-          break;
+        case 00 -> result.append("---");
+        case 01 -> result.append("--x");
+        case 02 -> result.append("-w-");
+        case 03 -> result.append("-wx");
+        case 04 -> result.append("r--");
+        case 05 -> result.append("r-x");
+        case 06 -> result.append("rw-");
+        case 07 -> result.append("rwx");
       }
     }
     return result.toString();

@@ -484,20 +484,11 @@ public class LocalVFS implements VirtualFileSystem {
   public void setXattr(Inode inode, String attr, byte[] value, SetXattrMode mode)
       throws IOException {
 
-    int flag;
-    switch (mode) {
-      case EITHER:
-        flag = 0;
-        break;
-      case CREATE:
-        flag = 1;
-        break;
-      case REPLACE:
-        flag = 2;
-        break;
-      default:
-        throw new RuntimeException("never get here");
-    }
+    int flag = switch (mode) {
+      case EITHER -> 0;
+      case CREATE -> 1;
+      case REPLACE -> 2;
+    };
 
     try (SystemFd fd = inode2fd(inode, O_NOFOLLOW)) {
       int rc = sysVfs.fsetxattr(fd.fd(), toXattrName(attr), value, value.length, flag);
@@ -545,34 +536,24 @@ public class LocalVFS implements VirtualFileSystem {
     String msg = sysVfs.strerror(errno) + " " + e.name() + "(" + errno + ")";
     LOG.debug("Last error: {}", msg);
 
+    // FIXME: currently we assume that only xattr related calls return ENODATA
     switch (e) {
-      case ENOENT:
-        throw new NoEntException(msg);
-      case ENOTDIR:
-        throw new NotDirException(msg);
-      case EISDIR:
-        throw new IsDirException(msg);
-      case EIO:
-        throw new NfsIoException(msg);
-      case ENOTEMPTY:
-        throw new NotEmptyException(msg);
-      case EEXIST:
-        throw new ExistException(msg);
-      case ESTALE:
-        throw new StaleException(msg);
-      case EINVAL:
-        throw new InvalException(msg);
-      case ENOTSUP:
-        throw new NotSuppException(msg);
-      case ENXIO:
-        throw new NXioException(msg);
-      case ENODATA:
-        // FIXME: currently we assume that only xattr related calls return ENODATA
-        throw new NoXattrException(msg);
-      default:
+      case ENOENT -> throw new NoEntException(msg);
+      case ENOTDIR -> throw new NotDirException(msg);
+      case EISDIR -> throw new IsDirException(msg);
+      case EIO -> throw new NfsIoException(msg);
+      case ENOTEMPTY -> throw new NotEmptyException(msg);
+      case EEXIST -> throw new ExistException(msg);
+      case ESTALE -> throw new StaleException(msg);
+      case EINVAL -> throw new InvalException(msg);
+      case ENOTSUP -> throw new NotSuppException(msg);
+      case ENXIO -> throw new NXioException(msg);
+      case ENODATA -> throw new NoXattrException(msg);
+      default -> {
         IOException t = new ServerFaultException(msg);
         LOG.error("unhandled exception ", t);
         throw t;
+      }
     }
   }
 
