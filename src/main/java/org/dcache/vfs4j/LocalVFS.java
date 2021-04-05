@@ -87,6 +87,7 @@ public class LocalVFS implements VirtualFileSystem {
   private MethodHandle fErrono;
   private MethodHandle fOpen;
   private MethodHandle fOpenAt;
+  private MethodHandle fClose;
 
   public LocalVFS(File root) throws IOException {
 
@@ -112,6 +113,13 @@ public class LocalVFS implements VirtualFileSystem {
                     LibraryLookup.ofDefault().lookup("openat").get().address(),
                     MethodType.methodType(int.class, int.class,  MemoryAddress.class, int.class, int.class),
                     FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT, CLinker.C_INT)
+            );
+
+    fClose = CLinker.getInstance()
+            .downcallHandle(
+                    LibraryLookup.ofDefault().lookup("close").get().address(),
+                    MethodType.methodType(int.class, int.class),
+                    FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT)
             );
 
     rootFd = open(root.getAbsolutePath(), O_DIRECTORY, O_RDONLY);
@@ -643,7 +651,7 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public void onRemoval(RemovalNotification<Inode, SystemFd> notification) {
-      sysVfs.close(notification.getValue().fd());
+      close(notification.getValue().fd());
     }
   }
 
@@ -686,8 +694,6 @@ public class LocalVFS implements VirtualFileSystem {
     int readlinkat(int fd, CharSequence path, @Out byte[] buf, int len);
 
     int unlinkat(int fd, CharSequence path, int flags);
-
-    int close(int fd);
 
     int mkdirat(int fd, CharSequence path, int mode);
 
@@ -754,6 +760,13 @@ public class LocalVFS implements VirtualFileSystem {
     }
   }
 
+  private int close(int fd) {
+    try{
+      return (int)fClose.invokeExact(fd);
+    } catch (Throwable t) {
+      throw new RuntimeException(t);
+    }
+  }
 
   /** {@link AutoCloseable} class which represents OS native file descriptor. */
   private class SystemFd implements Closeable {
@@ -770,7 +783,7 @@ public class LocalVFS implements VirtualFileSystem {
 
     @Override
     public void close() throws IOException {
-      int rc = sysVfs.close(fd);
+      int rc = LocalVFS.this.close(fd);
       checkError(rc == 0);
     }
   }
