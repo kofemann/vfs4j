@@ -88,6 +88,8 @@ public class LocalVFS implements VirtualFileSystem {
   private MethodHandle fOpen;
   private MethodHandle fOpenAt;
   private MethodHandle fClose;
+  private MethodHandle fNameToHandleAt;
+  private MethodHandle fOpenByHandleAt;
 
   public LocalVFS(File root) throws IOException {
 
@@ -120,6 +122,20 @@ public class LocalVFS implements VirtualFileSystem {
                     LibraryLookup.ofDefault().lookup("close").get().address(),
                     MethodType.methodType(int.class, int.class),
                     FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT)
+            );
+
+    fNameToHandleAt = CLinker.getInstance()
+            .downcallHandle(
+                    LibraryLookup.ofDefault().lookup("name_to_handle_at").get().address(),
+                    MethodType.methodType(int.class, int.class, MemoryAddress.class, MemoryAddress.class, MemoryAddress.class, int.class),
+                    FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_POINTER, CLinker.C_POINTER, CLinker.C_INT)
+            );
+
+    fOpenByHandleAt = CLinker.getInstance()
+            .downcallHandle(
+                    LibraryLookup.ofDefault().lookup("open_by_handle_at").get().address(),
+                    MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class),
+                    FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT)
             );
 
     rootFd = open(root.getAbsolutePath(), O_DIRECTORY, O_RDONLY);
@@ -570,14 +586,23 @@ public class LocalVFS implements VirtualFileSystem {
    */
   private KernelFileHandle path2fh(int fd, String path, int flags) throws IOException {
 
-    int[] mntId = new int[1];
-    byte[] bytes = new byte[KernelFileHandle.MAX_HANDLE_SZ];
-    ByteBuffer.wrap(bytes).order(ByteOrder.nativeOrder()).putInt(0, bytes.length);
-    int rc = sysVfs.name_to_handle_at(fd, path, bytes, mntId, flags);
-    checkError(rc == 0);
-    KernelFileHandle fh = new KernelFileHandle(bytes);
-    LOG.debug("path = [{}], handle = {}", path, fh);
-    return fh;
+    try(MemorySegment str = CLinker.toCString(path);
+        MemorySegment bytes = MemorySegment.allocateNative(KernelFileHandle.MAX_HANDLE_SZ);
+        MemorySegment mntId = MemorySegment.allocateNative(Integer.BYTES)){
+
+      bytes.asByteBuffer().order(ByteOrder.nativeOrder()).putInt(0, (int)bytes.byteSize());
+      int rc;
+      try {
+        rc = (int)fNameToHandleAt.invokeExact(fd, str.address(), bytes.address(), mntId.address(), flags);
+      } catch (Throwable t) {
+        throw new RuntimeException(t);
+      }
+
+      checkError(rc == 0);
+      KernelFileHandle fh = new KernelFileHandle(bytes.toByteArray());
+      LOG.debug("path = [{}], handle = {}", path, fh);
+      return fh;
+    }
   }
 
   protected void checkError(boolean condition) throws IOException {
@@ -614,7 +639,14 @@ public class LocalVFS implements VirtualFileSystem {
 
   private SystemFd inode2fd(Inode inode, int flags) throws IOException {
     KernelFileHandle fh = new KernelFileHandle(inode);
-    int fd = sysVfs.open_by_handle_at(rootFd, fh.toBytes(), flags);
+    int fd;
+    byte[] fhBytes = fh.toBytes();
+    try (MemorySegment rawHandle = MemorySegment.allocateNative(fhBytes.length)){
+      rawHandle.asByteBuffer().put(fhBytes);
+      fd = (int)fOpenByHandleAt.invokeExact(rootFd, rawHandle.address(), flags);
+    } catch (Throwable t) {
+      throw new RuntimeException(t);
+    }
     checkError(fd >= 0);
     return new SystemFd(fd);
   }
@@ -677,11 +709,6 @@ public class LocalVFS implements VirtualFileSystem {
   public interface SysVfs {
 
     int ioctl(int fd, int request, @Out @In byte[] fh);
-
-    int name_to_handle_at(
-        int fd, CharSequence name, @Out @In byte[] fh, @Out int[] mntId, int flag);
-
-    int open_by_handle_at(int mount_fd, @In byte[] fh, int flags);
 
     int __fxstat64(int version, int fd, @Transient @Out FileStat fileStat);
 
