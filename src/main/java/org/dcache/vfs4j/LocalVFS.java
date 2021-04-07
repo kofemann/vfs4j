@@ -84,12 +84,12 @@ public class LocalVFS implements VirtualFileSystem {
   private final LoadingCache<Inode, SystemFd> _openFilesCache;
 
   // handles to native functions;
-  private MethodHandle fErrono;
-  private MethodHandle fOpen;
-  private MethodHandle fOpenAt;
-  private MethodHandle fClose;
-  private MethodHandle fNameToHandleAt;
-  private MethodHandle fOpenByHandleAt;
+  private final MethodHandle fErrono;
+  private final MethodHandle fOpen;
+  private final MethodHandle fOpenAt;
+  private final MethodHandle fClose;
+  private final MethodHandle fNameToHandleAt;
+  private final MethodHandle fOpenByHandleAt;
 
   public LocalVFS(File root) throws IOException {
 
