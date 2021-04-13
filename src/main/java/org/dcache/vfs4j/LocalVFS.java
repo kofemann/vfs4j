@@ -84,7 +84,7 @@ public class LocalVFS implements VirtualFileSystem {
   private final LoadingCache<Inode, SystemFd> _openFilesCache;
 
   // handles to native functions;
-  private final MethodHandle fErrono;
+  private final MethodHandle fStrerror;
   private final MethodHandle fOpen;
   private final MethodHandle fOpenAt;
   private final MethodHandle fClose;
@@ -93,12 +93,14 @@ public class LocalVFS implements VirtualFileSystem {
   private final MethodHandle fSync;
   private final MethodHandle fDataSync;
 
+  private final VarHandle err
+
   public LocalVFS(File root) throws IOException {
 
     sysVfs = FFIProvider.getSystemProvider().createLibraryLoader(SysVfs.class).load("c");
     runtime = jnr.ffi.Runtime.getRuntime(sysVfs);
 
-    fErrono = CLinker.getInstance()
+    fStrerror = CLinker.getInstance()
             .downcallHandle(
                     LibraryLookup.ofDefault().lookup("strerror").get().address(),
                     MethodType.methodType(MemoryAddress.class, int.class),
@@ -785,7 +787,7 @@ public class LocalVFS implements VirtualFileSystem {
   // FFI helpers
   private String strerror(int errno) {
     try {
-    MemoryAddress o = (MemoryAddress)fErrono.invokeExact(errno);
+    MemoryAddress o = (MemoryAddress) fStrerror.invokeExact(errno);
     return CLinker.toJavaStringRestricted(o);
     } catch (Throwable t) {
       throw new RuntimeException(t);
