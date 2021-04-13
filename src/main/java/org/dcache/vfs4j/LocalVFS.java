@@ -90,6 +90,8 @@ public class LocalVFS implements VirtualFileSystem {
   private final MethodHandle fClose;
   private final MethodHandle fNameToHandleAt;
   private final MethodHandle fOpenByHandleAt;
+  private final MethodHandle fSync;
+  private final MethodHandle fDataSync;
 
   public LocalVFS(File root) throws IOException {
 
@@ -136,6 +138,20 @@ public class LocalVFS implements VirtualFileSystem {
                     LibraryLookup.ofDefault().lookup("open_by_handle_at").get().address(),
                     MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class),
                     FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT)
+            );
+
+    fDataSync = CLinker.getInstance()
+            .downcallHandle(
+                    LibraryLookup.ofDefault().lookup("fdatasync").get().address(),
+                    MethodType.methodType(int.class, int.class),
+                    FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT)
+            );
+
+    fSync = CLinker.getInstance()
+            .downcallHandle(
+                    LibraryLookup.ofDefault().lookup("fsync").get().address(),
+                    MethodType.methodType(int.class, int.class),
+                    FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT)
             );
 
     rootFd = open(root.getAbsolutePath(), O_DIRECTORY, O_RDONLY);
@@ -379,10 +395,19 @@ public class LocalVFS implements VirtualFileSystem {
         // NOP
         break;
       case DATA_SYNC:
-        rc = sysVfs.fdatasync(fd.fd());
+        try {
+          rc = (int)fDataSync.invokeExact(fd.fd());
+        } catch (Throwable t) {
+          throw new RuntimeException(t);
+        }
         break;
       case FILE_SYNC:
-        rc = sysVfs.fsync(fd.fd());
+        try {
+          rc = (int)fSync.invokeExact(fd.fd());
+        } catch (Throwable t) {
+          throw new RuntimeException(t);
+        }
+
         break;
       default:
         throw new RuntimeException("bad sync type");
@@ -733,10 +758,6 @@ public class LocalVFS implements VirtualFileSystem {
     int pread(int fd, @Out ByteBuffer buf, int nbyte, long offset);
 
     int pwrite(int fd, @In ByteBuffer buf, int nbyte, long offset);
-
-    int fsync(int fd);
-
-    int fdatasync(int fd);
 
     int fstatfs(int fd, @Out StatFs statfs);
 
