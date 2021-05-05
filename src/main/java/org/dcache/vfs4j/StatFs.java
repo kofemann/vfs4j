@@ -1,13 +1,32 @@
 package org.dcache.vfs4j;
 
 import com.google.common.base.MoreObjects;
+import jdk.incubator.foreign.MemoryLayout;
 import jnr.ffi.Struct;
+
+import java.nio.ByteOrder;
 
 /** */
 public class StatFs extends Struct {
 
   public StatFs(jnr.ffi.Runtime runtime) {
     super(runtime);
+
+    MemoryLayout layout = MemoryLayout.ofStruct(
+            MemoryLayout.ofValueBits(Long.SIZE, ByteOrder.nativeOrder()).withName("type"),
+            MemoryLayout.ofValueBits(Long.SIZE, ByteOrder.nativeOrder()).withName("bsize"),
+            MemoryLayout.ofValueBits(Long.SIZE, ByteOrder.nativeOrder()).withName("block"),
+            MemoryLayout.ofValueBits(Long.SIZE, ByteOrder.nativeOrder()).withName("free"),
+            MemoryLayout.ofValueBits(Long.SIZE, ByteOrder.nativeOrder()).withName("bavail"),
+
+            MemoryLayout.ofValueBits(Long.SIZE, ByteOrder.nativeOrder()).withName("files"),
+            MemoryLayout.ofValueBits(Long.SIZE, ByteOrder.nativeOrder()).withName("ffree"),
+            MemoryLayout.ofValueBits(Long.SIZE, ByteOrder.nativeOrder()).withName("fsid"),
+            MemoryLayout.ofValueBits(Long.SIZE, ByteOrder.nativeOrder()).withName("namelen"),
+            MemoryLayout.ofValueBits(Long.SIZE, ByteOrder.nativeOrder()).withName("frsize"),
+            MemoryLayout.ofValueBits(Long.SIZE, ByteOrder.nativeOrder()).withName("flags"),
+            MemoryLayout.ofSequence(6, MemoryLayout.ofValueBits(Integer.SIZE, ByteOrder.nativeOrder())).withName("spare")
+            );
   }
 
   public final Unsigned64 f_type = new Unsigned64();

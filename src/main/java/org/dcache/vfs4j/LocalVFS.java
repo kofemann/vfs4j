@@ -12,6 +12,7 @@ import java.io.File;
 import java.io.IOException;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodType;
+import java.lang.invoke.VarHandle;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
@@ -26,6 +27,7 @@ import jdk.incubator.foreign.CLinker;
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.LibraryLookup;
 import jdk.incubator.foreign.MemoryAddress;
+import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
 import jnr.ffi.byref.LongLongByReference;
 import jnr.ffi.provider.FFIProvider;
@@ -92,13 +94,16 @@ public class LocalVFS implements VirtualFileSystem {
   private final MethodHandle fOpenByHandleAt;
   private final MethodHandle fSync;
   private final MethodHandle fDataSync;
-
-  private final VarHandle err
+  private final VarHandle errnoHandle;
+  private final MemoryAddress errnoAddress;
 
   public LocalVFS(File root) throws IOException {
 
     sysVfs = FFIProvider.getSystemProvider().createLibraryLoader(SysVfs.class).load("c");
     runtime = jnr.ffi.Runtime.getRuntime(sysVfs);
+
+    errnoAddress = LibraryLookup.ofDefault().lookup("errno").get().address();
+    errnoHandle = MemoryLayout.ofValueBits(Integer.SIZE, ByteOrder.nativeOrder()).varHandle(int.class);
 
     fStrerror = CLinker.getInstance()
             .downcallHandle(
@@ -634,32 +639,40 @@ public class LocalVFS implements VirtualFileSystem {
 
   protected void checkError(boolean condition) throws IOException {
 
-    if (condition) {
-      return;
-    }
+    // memory segments can't be used by multiple threads
+    try(MemorySegment errnoMemorySegment = errnoAddress.asSegmentRestricted(Integer.BYTES)) {
+      if (condition) {
+        errnoHandle.set(errnoMemorySegment, 0);
+        return;
+      }
 
-    int errno = runtime.getLastError();
-    Errno e = Errno.valueOf(errno);
-    String msg = strerror(errno) + " " + e.name() + "(" + errno + ")";
-    LOG.debug("Last error: {}", msg);
+      int errno = (int)errnoHandle.get(errnoMemorySegment);
+      if (errno == 0) {
+        return;
+      }
 
-    // FIXME: currently we assume that only xattr related calls return ENODATA
-    switch (e) {
-      case ENOENT -> throw new NoEntException(msg);
-      case ENOTDIR -> throw new NotDirException(msg);
-      case EISDIR -> throw new IsDirException(msg);
-      case EIO -> throw new NfsIoException(msg);
-      case ENOTEMPTY -> throw new NotEmptyException(msg);
-      case EEXIST -> throw new ExistException(msg);
-      case ESTALE -> throw new StaleException(msg);
-      case EINVAL -> throw new InvalException(msg);
-      case ENOTSUP -> throw new NotSuppException(msg);
-      case ENXIO -> throw new NXioException(msg);
-      case ENODATA -> throw new NoXattrException(msg);
-      default -> {
-        IOException t = new ServerFaultException(msg);
-        LOG.error("unhandled exception ", t);
-        throw t;
+      Errno e = Errno.valueOf(errno);
+      String msg = strerror(errno) + " " + e.name() + "(" + errno + ")";
+      LOG.debug("Last error: {}", msg);
+
+      // FIXME: currently we assume that only xattr related calls return ENODATA
+      switch (e) {
+        case ENOENT -> throw new NoEntException(msg);
+        case ENOTDIR -> throw new NotDirException(msg);
+        case EISDIR -> throw new IsDirException(msg);
+        case EIO -> throw new NfsIoException(msg);
+        case ENOTEMPTY -> throw new NotEmptyException(msg);
+        case EEXIST -> throw new ExistException(msg);
+        case ESTALE -> throw new StaleException(msg);
+        case EINVAL -> throw new InvalException(msg);
+        case ENOTSUP -> throw new NotSuppException(msg);
+        case ENXIO -> throw new NXioException(msg);
+        case ENODATA -> throw new NoXattrException(msg);
+        default -> {
+          IOException t = new ServerFaultException(msg);
+          LOG.error("unhandled exception ", t);
+          throw t;
+        }
       }
     }
   }
