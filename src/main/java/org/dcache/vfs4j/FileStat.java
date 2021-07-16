@@ -18,6 +18,7 @@ public class FileStat extends Struct {
   public final Signed32 st_mode = new Signed32(); /* File mode.  */
   public final Signed32 st_uid = new Signed32(); /* User ID of the file's owner.	*/
   public final Signed32 st_gid = new Signed32(); /* Group ID of the file's group.*/
+  public final Signed32 pad0 = new Signed32();  // unused
   public final Signed64 st_rdev = new Signed64(); /* Device number, if device.  */
   public final Signed64 st_size = new Signed64(); /* Size of file, in bytes.  */
   public final Signed64 st_blksize = new Signed64(); /* Optimal block size for I/O.  */
