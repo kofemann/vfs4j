@@ -19,7 +19,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.TreeSet;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import javax.annotation.Nonnull;
 import javax.security.auth.Subject;
 
@@ -594,17 +596,25 @@ public class LocalVFS implements VirtualFileSystem {
   }
 
   @Override
-  public long copyFileRange(Inode src, long srcPos, Inode dst, long dstPos, long len)
+  public Future<Long> copyFileRange(Inode src, long srcPos, Inode dst, long dstPos, long len)
       throws IOException {
 
     SystemFd fdIn = getOfLoadRawFd(src);
     SystemFd fdDst = getOfLoadRawFd(dst);
 
+    return CompletableFuture.supplyAsync(
+            () -> sysVfs.copy_file_range(
+                    fdIn.fd(), new LongLongByReference(srcPos),
+            fdDst.fd(), new LongLongByReference(dstPos), len, 0)
+    ).thenCompose(rc -> {
+        try {
+          checkError(rc >= 0);
+          return CompletableFuture.completedFuture(Long.valueOf(rc));
+        } catch (IOException e) {
+        return CompletableFuture.failedFuture(e);
+        }
+    });
 
-    int rc = sysVfs.copy_file_range(fdIn.fd(), new LongLongByReference(srcPos),
-            fdDst.fd(), new LongLongByReference(dstPos), len, 0);
-    checkError(rc >= 0);
-    return rc;
   }
 
   /**
