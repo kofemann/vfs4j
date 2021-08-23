@@ -113,6 +113,22 @@ public class LocalVFS implements VirtualFileSystem {
           MemoryLayout.ofPaddingBits(64) /* unused */
   );
 
+  private static final MemoryLayout STAT_FS_LAYOUT = MemoryLayout.ofStruct(
+          MemoryLayout.ofValueBits(Long.SIZE, ByteOrder.nativeOrder()).withName("type"),
+          MemoryLayout.ofValueBits(Long.SIZE, ByteOrder.nativeOrder()).withName("bsize"),
+          MemoryLayout.ofValueBits(Long.SIZE, ByteOrder.nativeOrder()).withName("block"),
+          MemoryLayout.ofValueBits(Long.SIZE, ByteOrder.nativeOrder()).withName("free"),
+          MemoryLayout.ofValueBits(Long.SIZE, ByteOrder.nativeOrder()).withName("bavail"),
+
+          MemoryLayout.ofValueBits(Long.SIZE, ByteOrder.nativeOrder()).withName("files"),
+          MemoryLayout.ofValueBits(Long.SIZE, ByteOrder.nativeOrder()).withName("ffree"),
+          MemoryLayout.ofValueBits(Long.SIZE, ByteOrder.nativeOrder()).withName("fsid"),
+          MemoryLayout.ofValueBits(Long.SIZE, ByteOrder.nativeOrder()).withName("namelen"),
+          MemoryLayout.ofValueBits(Long.SIZE, ByteOrder.nativeOrder()).withName("frsize"),
+          MemoryLayout.ofValueBits(Long.SIZE, ByteOrder.nativeOrder()).withName("flags"),
+          MemoryLayout.ofSequence(6, MemoryLayout.ofValueBits(Integer.SIZE, ByteOrder.nativeOrder())).withName("spare")
+  );
+
   // handles to native functions;
   private final MethodHandle fStrerror;
   private final MethodHandle fOpen;
@@ -123,6 +139,7 @@ public class LocalVFS implements VirtualFileSystem {
   private final MethodHandle fSync;
   private final MethodHandle fDataSync;
   private final MethodHandle fStat;
+  private final MethodHandle fStatFs;
   private final VarHandle errnoHandle;
   private final MemoryAddress errnoAddress;
 
@@ -197,6 +214,13 @@ public class LocalVFS implements VirtualFileSystem {
                     FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER)
             );
 
+    fStatFs = CLinker.getInstance()
+            .downcallHandle(
+                    LibraryLookup.ofDefault().lookup("fstatfs").get().address(),
+                    MethodType.methodType(int.class, int.class, MemoryAddress.class),
+                    FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER)
+            );
+
     rootFd = open(root.getAbsolutePath(), O_DIRECTORY, O_RDONLY);
     checkError(rootFd >= 0);
 
@@ -254,15 +278,35 @@ public class LocalVFS implements VirtualFileSystem {
 
   @Override
   public FsStat getFsStat() throws IOException {
-    StatFs statFs = new StatFs(runtime);
-    int rc = sysVfs.fstatfs(rootFd, statFs);
-    checkError(rc == 0);
 
-    return new FsStat(
-        statFs.f_blocks.get() * statFs.f_bsize.get(),
-        statFs.f_files.get(),
-        (statFs.f_blocks.get() - statFs.f_bfree.get()) * statFs.f_bsize.get(),
-        statFs.f_files.get() - statFs.f_ffree.get());
+    try(MemorySegment rawStatFS = MemorySegment.allocateNative(STAT_FS_LAYOUT)) {
+      int rc = (int)fStatFs.invokeExact(rootFd, rawStatFS.address());
+      checkError(rc == 0);
+
+      ByteBuffer bb = rawStatFS.asByteBuffer().order(ByteOrder.nativeOrder());
+
+      long f_type = bb.getLong();
+      long  f_bsize = bb.getLong();
+      long f_blocks = bb.getLong();
+      long f_bfree = bb.getLong();
+      long f_bavail = bb.getLong();
+      long f_files = bb.getLong();
+      long f_ffree = bb.getLong();
+      long f_fsid = bb.getLong();
+      long f_namelen = bb.getLong();
+      long f_frsize = bb.getLong();
+      long f_flags = bb.getLong();
+
+      return new FsStat(
+          f_blocks * f_bsize,
+          f_files,
+          (f_blocks - f_bfree) * f_bsize,
+          f_files - f_ffree);
+
+    } catch (Throwable t) {
+      Throwables.throwIfInstanceOf(t, IOException.class);
+      throw new RuntimeException(t);
+    }
   }
 
   @Override
@@ -831,8 +875,6 @@ public class LocalVFS implements VirtualFileSystem {
     int pread(int fd, @Out ByteBuffer buf, int nbyte, long offset);
 
     int pwrite(int fd, @In ByteBuffer buf, int nbyte, long offset);
-
-    int fstatfs(int fd, @Out StatFs statfs);
 
     int renameat(int oldfd, CharSequence oldPath, int newfd, CharSequence newPath);
 
