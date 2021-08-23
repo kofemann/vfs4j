@@ -130,24 +130,20 @@ public class LocalVFS implements VirtualFileSystem {
   );
 
   // handles to native functions;
-  private final MethodHandle fStrerror;
-  private final MethodHandle fOpen;
-  private final MethodHandle fOpenAt;
-  private final MethodHandle fClose;
-  private final MethodHandle fNameToHandleAt;
-  private final MethodHandle fOpenByHandleAt;
-  private final MethodHandle fSync;
-  private final MethodHandle fDataSync;
-  private final MethodHandle fStat;
-  private final MethodHandle fStatFs;
-  private final VarHandle errnoHandle;
-  private final MemoryAddress errnoAddress;
+  private static final MethodHandle fStrerror;
+  private static final MethodHandle fOpen;
+  private static final MethodHandle fOpenAt;
+  private static final MethodHandle fClose;
+  private static final MethodHandle fNameToHandleAt;
+  private static final MethodHandle fOpenByHandleAt;
+  private static final MethodHandle fSync;
+  private static final MethodHandle fDataSync;
+  private static final MethodHandle fStat;
+  private static final MethodHandle fStatFs;
+  private static final VarHandle errnoHandle;
+  private static final MemoryAddress errnoAddress;
 
-  public LocalVFS(File root) throws IOException {
-
-    sysVfs = FFIProvider.getSystemProvider().createLibraryLoader(SysVfs.class).load("c");
-    runtime = jnr.ffi.Runtime.getRuntime(sysVfs);
-
+  static {
     errnoAddress = LibraryLookup.ofDefault().lookup("errno").get().address();
     errnoHandle = MemoryLayout.ofValueBits(Integer.SIZE, ByteOrder.nativeOrder()).varHandle(int.class);
 
@@ -220,6 +216,12 @@ public class LocalVFS implements VirtualFileSystem {
                     MethodType.methodType(int.class, int.class, MemoryAddress.class),
                     FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER)
             );
+  }
+
+  public LocalVFS(File root) throws IOException {
+
+    sysVfs = FFIProvider.getSystemProvider().createLibraryLoader(SysVfs.class).load("c");
+    runtime = jnr.ffi.Runtime.getRuntime(sysVfs);
 
     rootFd = open(root.getAbsolutePath(), O_DIRECTORY, O_RDONLY);
     checkError(rootFd >= 0);
