@@ -1,37 +1,41 @@
 package org.dcache.vfs4j;
 
+import java.nio.ByteOrder;
 import java.text.DecimalFormat;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+
+import jdk.incubator.foreign.GroupLayout;
+import jdk.incubator.foreign.MemoryLayout;
 import jnr.ffi.Struct;
 
 public class FileStat extends Struct {
 
-  private static final DateTimeFormatter LS_TIME_FORMAT =
-      DateTimeFormatter.ofPattern("MMM dd HH:mm");
+  public static final GroupLayout STAT_LAYOUT = MemoryLayout.ofStruct(
 
-  public final Signed64 st_dev = new Signed64(); /* Device.  */
-  public final Signed64 st_ino = new Signed64(); /* File serial number.	*/
-  public final Signed64 st_nlink = new Signed64(); /* Link count.  */
-  public final Signed32 st_mode = new Signed32(); /* File mode.  */
-  public final Signed32 st_uid = new Signed32(); /* User ID of the file's owner.	*/
-  public final Signed32 st_gid = new Signed32(); /* Group ID of the file's group.*/
-  public final Signed32 pad0 = new Signed32();  // unused
-  public final Signed64 st_rdev = new Signed64(); /* Device number, if device.  */
-  public final Signed64 st_size = new Signed64(); /* Size of file, in bytes.  */
-  public final Signed64 st_blksize = new Signed64(); /* Optimal block size for I/O.  */
-  public final Signed64 st_blocks = new Signed64(); /* Number 512-byte blocks allocated. */
-  public final Signed64 st_atime = new Signed64(); // Time of last access (time_t)
-  public final Signed64 st_atimensec = new Signed64(); // Time of last access (nanoseconds)
-  public final Signed64 st_mtime = new Signed64(); // Last data modification time (time_t)
-  public final Signed64 st_mtimensec = new Signed64(); // Last data modification time (nanoseconds)
-  public final Signed64 st_ctime = new Signed64(); // Time of last status change (time_t)
-  public final Signed64 st_ctimensec = new Signed64(); // Time of last status change (nanoseconds)
-  public final Signed64 __unused4 = new Signed64();
-  public final Signed64 __unused5 = new Signed64();
-  public final Signed64 __unused6 = new Signed64();
+    MemoryLayout.ofValueBits(64, ByteOrder.nativeOrder()).withName("st_dev"), /* Device. */
+    MemoryLayout.ofValueBits(64, ByteOrder.nativeOrder()).withName("st_ino"), /* File serial number.	*/
+    MemoryLayout.ofValueBits(64, ByteOrder.nativeOrder()).withName("st_nlink"), /* Object link count.	*/
+    MemoryLayout.ofValueBits(32, ByteOrder.nativeOrder()).withName("st_mode"), /* File mode.	*/
+    MemoryLayout.ofValueBits(32, ByteOrder.nativeOrder()).withName("st_uid"), /* User ID of the file's owner. */
+    MemoryLayout.ofValueBits(32, ByteOrder.nativeOrder()).withName("st_gid"), /* Group ID of the file's owner.*/
+    MemoryLayout.ofPaddingBits(32), /* unused */
+    MemoryLayout.ofValueBits(64, ByteOrder.nativeOrder()).withName("st_rdev"), /* Device number, if device.*/
+    MemoryLayout.ofValueBits(64, ByteOrder.nativeOrder()).withName("st_size"), /* File's size in bytes.*/
+    MemoryLayout.ofValueBits(64, ByteOrder.nativeOrder()).withName("st_blksize"), /* Optimal block size for IO.*/
+    MemoryLayout.ofValueBits(64, ByteOrder.nativeOrder()).withName("st_blocks"), /* Number of 512-byte blocks allocated/ */
+    MemoryLayout.ofValueBits(64, ByteOrder.nativeOrder()).withName("st_atime"), /* Time of last access (time_t) .*/
+    MemoryLayout.ofValueBits(64, ByteOrder.nativeOrder()).withName("st_atimensec"), /* Time of last access (nannoseconds).*/
+    MemoryLayout.ofValueBits(64, ByteOrder.nativeOrder()).withName("st_mtime"), /* Last data modification time (time_t).*/
+    MemoryLayout.ofValueBits(64, ByteOrder.nativeOrder()).withName("st_mtimensec"), /* Last data modification time (nanoseconds).*/
+    MemoryLayout.ofValueBits(64, ByteOrder.nativeOrder()).withName("st_ctime"), /* Time of last status change (time_t).*/
+    MemoryLayout.ofValueBits(64, ByteOrder.nativeOrder()).withName("st_ctimensec"), /* Time of last status change (nanoseconds).*/
+    MemoryLayout.ofPaddingBits(64), /* unused */
+    MemoryLayout.ofPaddingBits(64), /* unused */
+    MemoryLayout.ofPaddingBits(64) /* unused */
+  );
 
   public static final int S_IFIFO = 0010000; // named pipe (fifo)
   public static final int S_IFCHR = 0020000; // character special
@@ -88,62 +92,5 @@ public class FileStat extends Struct {
 
   public static boolean S_ISLNK(int mode) {
     return S_ISTYPE(mode, S_IFLNK);
-  }
-
-  public static java.lang.String modeToString(int mode) {
-    StringBuilder result = new StringBuilder(10);
-    switch (mode & S_IFMT) {
-      case S_IFBLK -> result.append("b");
-      case S_IFCHR -> result.append("c");
-      case S_IFDIR -> result.append("d");
-      case S_IFIFO -> result.append("p");
-      case S_IFSOCK -> result.append("s");
-      case S_IFLNK -> result.append("l");
-      case S_IFREG -> result.append("-");
-      default -> result.append("?");
-    }
-
-    // owner, group, other
-    for (int i = 0; i < 3; i++) {
-      int acl = (mode >> (6 - 3 * i)) & 0000007;
-      switch (acl) {
-        case 00 -> result.append("---");
-        case 01 -> result.append("--x");
-        case 02 -> result.append("-w-");
-        case 03 -> result.append("-wx");
-        case 04 -> result.append("r--");
-        case 05 -> result.append("r-x");
-        case 06 -> result.append("rw-");
-        case 07 -> result.append("rwx");
-      }
-    }
-    return result.toString();
-  }
-
-  // technically _size (java long) will overflow after ~8 exabytes, so "Z"/"Y" is unreachable
-  private static final java.lang.String[] SIZE_UNITS = {"", "K", "M", "G", "T", "P", "E", "Z", "Y"};
-
-  public static java.lang.String sizeToString(long bytes) {
-    if (bytes == 0) {
-      return "0";
-    }
-    int orderOfMagnitude = (int) Math.floor(Math.log(bytes) / Math.log(1024));
-    double significantSize = (double) bytes / (1L << orderOfMagnitude * 10);
-    DecimalFormat sizeFormat = new DecimalFormat("#.#"); // not thread safe
-    return sizeFormat.format(significantSize) + SIZE_UNITS[orderOfMagnitude];
-  }
-
-  /** @return the equivalent of "ls -lh" (as close as possible) */
-  @Override
-  public java.lang.String toString() {
-    java.lang.String humanReadableSize = sizeToString(st_size.get());
-    java.lang.String humanReadableMTime =
-        LocalDateTime.ofInstant(Instant.ofEpochMilli(st_mtime.get()), ZoneId.systemDefault())
-            .format(LS_TIME_FORMAT);
-    return modeToString(st_mode.get())
-        + " "
-        + java.lang.String.format(
-            "%4d %4d %4d %4s %s",
-            st_nlink.get(), st_uid.get(), st_gid.get(), humanReadableSize, humanReadableMTime);
   }
 }

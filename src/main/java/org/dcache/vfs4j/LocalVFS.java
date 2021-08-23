@@ -96,6 +96,7 @@ public class LocalVFS implements VirtualFileSystem {
   private final MethodHandle fOpenByHandleAt;
   private final MethodHandle fSync;
   private final MethodHandle fDataSync;
+  private final MethodHandle fStat;
   private final VarHandle errnoHandle;
   private final MemoryAddress errnoAddress;
 
@@ -161,6 +162,13 @@ public class LocalVFS implements VirtualFileSystem {
                     LibraryLookup.ofDefault().lookup("fsync").get().address(),
                     MethodType.methodType(int.class, int.class),
                     FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT)
+            );
+
+    fStat = CLinker.getInstance()
+            .downcallHandle(
+                    LibraryLookup.ofDefault().lookup("__fxstat64").get().address(),
+                    MethodType.methodType(int.class, int.class, int.class, MemoryAddress.class),
+                    FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER)
             );
 
     rootFd = open(root.getAbsolutePath(), O_DIRECTORY, O_RDONLY);
@@ -702,29 +710,45 @@ public class LocalVFS implements VirtualFileSystem {
   }
 
   private Stat statByFd(SystemFd fd) throws IOException {
-    FileStat stat = new FileStat(runtime);
-    int rc = sysVfs.__fxstat64(0, fd.fd(), stat);
-    checkError(rc == 0);
-    return toVfsStat(stat);
+
+    int rc;
+
+    try(MemorySegment rawStat = MemorySegment.allocateNative(FileStat.STAT_LAYOUT)) {
+      rc = (int)fStat.invokeExact(0, fd.fd(), rawStat.address());
+
+      checkError(rc == 0);
+      return toVfsStat(rawStat);
+    } catch (Throwable t) {
+      Throwables.throwIfInstanceOf(t, IOException.class);
+      throw new RuntimeException(t);
+    }
   }
 
-  private Stat toVfsStat(FileStat fileStat) {
+  private Stat toVfsStat(MemorySegment fileStat) {
     Stat vfsStat = new Stat();
 
-    vfsStat.setATime(fileStat.st_atime.get() * 1000);
-    vfsStat.setCTime(fileStat.st_ctime.get() * 1000);
-    vfsStat.setMTime(fileStat.st_mtime.get() * 1000);
+    ByteBuffer bb = fileStat.asByteBuffer().order(ByteOrder.nativeOrder());
 
-    vfsStat.setGid(fileStat.st_gid.get());
-    vfsStat.setUid(fileStat.st_uid.get());
-    vfsStat.setDev(fileStat.st_dev.intValue());
-    vfsStat.setIno(fileStat.st_ino.intValue());
-    vfsStat.setMode(fileStat.st_mode.get());
-    vfsStat.setNlink(fileStat.st_nlink.intValue());
-    vfsStat.setRdev(fileStat.st_rdev.intValue());
-    vfsStat.setSize(fileStat.st_size.get());
-    vfsStat.setFileid(fileStat.st_ino.get());
-    vfsStat.setGeneration(Math.max(fileStat.st_ctime.get(), fileStat.st_mtime.get()));
+    vfsStat.setDev((int)bb.getLong());
+    vfsStat.setFileid(bb.getLong());
+    vfsStat.setIno((int)vfsStat.getFileId());
+    vfsStat.setNlink((int)bb.getLong());
+    vfsStat.setMode(bb.getInt());
+    vfsStat.setGid(bb.getInt());
+    vfsStat.setUid(bb.getInt());
+    bb.getInt(); // padding
+    vfsStat.setRdev((int)bb.getLong());
+    vfsStat.setSize(bb.getLong());
+    bb.getLong(); // blksize
+    bb.getLong(); // blocks
+    vfsStat.setATime(bb.getLong() * 1000);
+    bb.getLong(); // atimenanos
+    vfsStat.setMTime(bb.getLong() * 1000);
+    bb.getLong(); // mtimenanos
+    vfsStat.setCTime(bb.getLong() * 1000);
+    bb.getLong(); // ctimenanos
+
+    vfsStat.setGeneration(Math.max(vfsStat.getCTime(), vfsStat.getMTime()));
 
     return vfsStat;
   }
@@ -759,8 +783,6 @@ public class LocalVFS implements VirtualFileSystem {
   public interface SysVfs {
 
     int ioctl(int fd, int request, @Out @In byte[] fh);
-
-    int __fxstat64(int version, int fd, @Transient @Out FileStat fileStat);
 
     Address fdopendir(int fd);
 
