@@ -27,6 +27,7 @@ import javax.security.auth.Subject;
 
 import jdk.incubator.foreign.CLinker;
 import jdk.incubator.foreign.FunctionDescriptor;
+import jdk.incubator.foreign.GroupLayout;
 import jdk.incubator.foreign.LibraryLookup;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
@@ -86,6 +87,31 @@ public class LocalVFS implements VirtualFileSystem {
 
   /** Cache of opened files used by read/write operations. */
   private final LoadingCache<Inode, SystemFd> _openFilesCache;
+
+  // struct stat layout
+  public static final GroupLayout STAT_LAYOUT = MemoryLayout.ofStruct(
+
+          MemoryLayout.ofValueBits(64, ByteOrder.nativeOrder()).withName("st_dev"), /* Device. */
+          MemoryLayout.ofValueBits(64, ByteOrder.nativeOrder()).withName("st_ino"), /* File serial number.	*/
+          MemoryLayout.ofValueBits(64, ByteOrder.nativeOrder()).withName("st_nlink"), /* Object link count.	*/
+          MemoryLayout.ofValueBits(32, ByteOrder.nativeOrder()).withName("st_mode"), /* File mode.	*/
+          MemoryLayout.ofValueBits(32, ByteOrder.nativeOrder()).withName("st_uid"), /* User ID of the file's owner. */
+          MemoryLayout.ofValueBits(32, ByteOrder.nativeOrder()).withName("st_gid"), /* Group ID of the file's owner.*/
+          MemoryLayout.ofPaddingBits(32), /* unused */
+          MemoryLayout.ofValueBits(64, ByteOrder.nativeOrder()).withName("st_rdev"), /* Device number, if device.*/
+          MemoryLayout.ofValueBits(64, ByteOrder.nativeOrder()).withName("st_size"), /* File's size in bytes.*/
+          MemoryLayout.ofValueBits(64, ByteOrder.nativeOrder()).withName("st_blksize"), /* Optimal block size for IO.*/
+          MemoryLayout.ofValueBits(64, ByteOrder.nativeOrder()).withName("st_blocks"), /* Number of 512-byte blocks allocated/ */
+          MemoryLayout.ofValueBits(64, ByteOrder.nativeOrder()).withName("st_atime"), /* Time of last access (time_t) .*/
+          MemoryLayout.ofValueBits(64, ByteOrder.nativeOrder()).withName("st_atimensec"), /* Time of last access (nannoseconds).*/
+          MemoryLayout.ofValueBits(64, ByteOrder.nativeOrder()).withName("st_mtime"), /* Last data modification time (time_t).*/
+          MemoryLayout.ofValueBits(64, ByteOrder.nativeOrder()).withName("st_mtimensec"), /* Last data modification time (nanoseconds).*/
+          MemoryLayout.ofValueBits(64, ByteOrder.nativeOrder()).withName("st_ctime"), /* Time of last status change (time_t).*/
+          MemoryLayout.ofValueBits(64, ByteOrder.nativeOrder()).withName("st_ctimensec"), /* Time of last status change (nanoseconds).*/
+          MemoryLayout.ofPaddingBits(64), /* unused */
+          MemoryLayout.ofPaddingBits(64), /* unused */
+          MemoryLayout.ofPaddingBits(64) /* unused */
+  );
 
   // handles to native functions;
   private final MethodHandle fStrerror;
@@ -713,7 +739,7 @@ public class LocalVFS implements VirtualFileSystem {
 
     int rc;
 
-    try(MemorySegment rawStat = MemorySegment.allocateNative(FileStat.STAT_LAYOUT)) {
+    try(MemorySegment rawStat = MemorySegment.allocateNative(STAT_LAYOUT)) {
       rc = (int)fStat.invokeExact(0, fd.fd(), rawStat.address());
 
       checkError(rc == 0);
