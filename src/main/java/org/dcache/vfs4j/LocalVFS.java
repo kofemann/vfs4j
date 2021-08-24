@@ -140,6 +140,7 @@ public class LocalVFS implements VirtualFileSystem {
   private static final MethodHandle fDataSync;
   private static final MethodHandle fStat;
   private static final MethodHandle fStatFs;
+  private static final MethodHandle fUnlinkAt;
   private static final VarHandle errnoHandle;
   private static final MemoryAddress errnoAddress;
 
@@ -215,6 +216,13 @@ public class LocalVFS implements VirtualFileSystem {
                     LibraryLookup.ofDefault().lookup("fstatfs").get().address(),
                     MethodType.methodType(int.class, int.class, MemoryAddress.class),
                     FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER)
+            );
+
+    fUnlinkAt = CLinker.getInstance()
+            .downcallHandle(
+                    LibraryLookup.ofDefault().lookup("unlinkat").get().address(),
+                    MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class),
+                    FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT)
             );
   }
 
@@ -435,8 +443,14 @@ public class LocalVFS implements VirtualFileSystem {
       Inode inode = lookup(parent, path);
       Stat stat = getattr(inode);
       int flags = stat.type() == Stat.Type.DIRECTORY ? AT_REMOVEDIR : 0;
-      int rc = sysVfs.unlinkat(fd.fd(), path, flags);
-      checkError(rc == 0);
+
+      try {
+        int rc = (int)fUnlinkAt.invokeExact(fd.fd(), CLinker.toCString(path).address(), flags);
+        checkError(rc == 0);
+      } catch (Throwable t) {
+        Throwables.throwIfInstanceOf(t, IOException.class);
+        throw new RuntimeException(t);
+      }
     }
   }
 
@@ -863,8 +877,6 @@ public class LocalVFS implements VirtualFileSystem {
     Dirent readdir(@In @Out Address dirp);
 
     int readlinkat(int fd, CharSequence path, @Out byte[] buf, int len);
-
-    int unlinkat(int fd, CharSequence path, int flags);
 
     int mkdirat(int fd, CharSequence path, int mode);
 
