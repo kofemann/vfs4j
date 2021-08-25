@@ -35,7 +35,6 @@ import jdk.incubator.foreign.MemorySegment;
 import jnr.ffi.byref.LongLongByReference;
 import jnr.ffi.provider.FFIProvider;
 import jnr.constants.platform.Errno;
-import jnr.ffi.Address;
 import jnr.ffi.annotations.*;
 import org.dcache.nfs.status.*;
 
@@ -129,6 +128,14 @@ public class LocalVFS implements VirtualFileSystem {
           MemoryLayout.ofSequence(6, MemoryLayout.ofValueBits(Integer.SIZE, ByteOrder.nativeOrder())).withName("spare")
   );
 
+  private static final MemoryLayout DIRENT_LAYOUT = MemoryLayout.ofStruct(
+          MemoryLayout.ofValueBits(Long.SIZE, ByteOrder.nativeOrder()).withName("ino"),
+          MemoryLayout.ofValueBits(Long.SIZE, ByteOrder.nativeOrder()).withName("off"),
+          MemoryLayout.ofValueBits(Short.SIZE, ByteOrder.nativeOrder()).withName("reclen"),
+          MemoryLayout.ofValueBits(Byte.SIZE, ByteOrder.nativeOrder()).withName("type"),
+          MemoryLayout.ofSequence(256, MemoryLayout.ofValueBits(Byte.SIZE, ByteOrder.nativeOrder())).withName("name")
+  );
+
   // handles to native functions;
   private static final MethodHandle fStrerror;
   private static final MethodHandle fOpen;
@@ -141,6 +148,10 @@ public class LocalVFS implements VirtualFileSystem {
   private static final MethodHandle fStat;
   private static final MethodHandle fStatFs;
   private static final MethodHandle fUnlinkAt;
+  private static final MethodHandle fOpendir;
+  private static final MethodHandle fReaddir;
+  private static final MethodHandle fSeekdir;
+
   private static final VarHandle errnoHandle;
   private static final MemoryAddress errnoAddress;
 
@@ -223,6 +234,27 @@ public class LocalVFS implements VirtualFileSystem {
                     LibraryLookup.ofDefault().lookup("unlinkat").get().address(),
                     MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class),
                     FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT)
+            );
+
+    fOpendir = CLinker.getInstance()
+            .downcallHandle(
+                    LibraryLookup.ofDefault().lookup("fdopendir").get().address(),
+                    MethodType.methodType(MemoryAddress.class, int.class),
+                    FunctionDescriptor.of(CLinker.C_POINTER, CLinker.C_INT)
+            );
+
+    fReaddir = CLinker.getInstance()
+            .downcallHandle(
+                    LibraryLookup.ofDefault().lookup("readdir").get().address(),
+                    MethodType.methodType(MemoryAddress.class, MemoryAddress.class),
+                    FunctionDescriptor.of(CLinker.C_POINTER, CLinker.C_POINTER)
+            );
+
+    fSeekdir = CLinker.getInstance()
+            .downcallHandle(
+                    LibraryLookup.ofDefault().lookup("seekdir").get().address(),
+                    MethodType.methodType(void.class, MemoryAddress.class, long.class),
+                    FunctionDescriptor.ofVoid(CLinker.C_POINTER, CLinker.C_LONG)
             );
   }
 
@@ -347,25 +379,39 @@ public class LocalVFS implements VirtualFileSystem {
 
     TreeSet<DirectoryEntry> list = new TreeSet<>();
     try (SystemFd fd = inode2fd(inode, O_DIRECTORY)) {
-      Address p = sysVfs.fdopendir(fd.fd());
-      checkError(p != null);
 
-      sysVfs.seekdir(p, cookie);
+      try {
+        MemoryAddress p = (MemoryAddress) fOpendir.invokeExact(fd.fd());
+        checkError(p != MemoryAddress.NULL);
 
-      while (true) {
-        Dirent dirent = sysVfs.readdir(p);
+        fSeekdir.invokeExact(p, cookie);
 
-        if (dirent == null) {
-          break;
+        while (true) {
+          MemoryAddress dirent = (MemoryAddress) fReaddir.invokeExact(p);
+          if (dirent == MemoryAddress.NULL) {
+            break;
+          }
+
+          var rawDirent = dirent.asSegmentRestricted(DIRENT_LAYOUT.byteSize());
+          ByteBuffer bb = rawDirent.asByteBuffer().order(ByteOrder.nativeOrder());
+
+          long ino = bb.getLong();
+          long off = bb.getLong();
+          int reclen = bb.getShort();
+          byte type = bb.get();
+
+          String name = CLinker.toJavaString(rawDirent.asSlice(8+8+2+1), UTF_8);
+
+          Inode fInode = path2fh(fd.fd(), name, 0).toInode();
+          Stat stat = getattr(fInode);
+          list.add(new DirectoryEntry(name, fInode, stat, off));
         }
-
-        String name = dirent.d_name.get();
-        Inode fInode = path2fh(fd.fd(), name, 0).toInode();
-        Stat stat = getattr(fInode);
-        list.add(new DirectoryEntry(name, fInode, stat, dirent.d_off.longValue()));
+        return new DirectoryStream(DirectoryStream.ZERO_VERIFIER, list);
+      } catch (Throwable t) {
+        Throwables.throwIfInstanceOf(t, IOException.class);
+        throw new RuntimeException(t);
       }
     }
-    return new DirectoryStream(DirectoryStream.ZERO_VERIFIER, list);
   }
 
   @Override
@@ -869,12 +915,6 @@ public class LocalVFS implements VirtualFileSystem {
   public interface SysVfs {
 
     int ioctl(int fd, int request, @Out @In byte[] fh);
-
-    Address fdopendir(int fd);
-
-    void seekdir(@In Address dirp, long offset);
-
-    Dirent readdir(@In @Out Address dirp);
 
     int readlinkat(int fd, CharSequence path, @Out byte[] buf, int len);
 
