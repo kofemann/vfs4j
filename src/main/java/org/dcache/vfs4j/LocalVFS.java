@@ -59,6 +59,17 @@ public class LocalVFS implements VirtualFileSystem {
 
   private final Logger LOG = LoggerFactory.getLogger(LocalVFS.class);
 
+  // max buffer size to cache
+  private final static int MAX_CACHE = 1024*1024;
+
+  // directIO ByteByffer cache
+  private static final ThreadLocal<ByteBuffer> BUFFERS = new ThreadLocal<ByteBuffer>() {
+    @Override
+    protected ByteBuffer initialValue() {
+      return  ByteBuffer.allocateDirect(MAX_CACHE);
+    }
+  };
+
   private static final String XATTR_PREFIX = "user.";
 
   // stolen from /usr/include/bits/fcntl-linux.h
@@ -151,6 +162,7 @@ public class LocalVFS implements VirtualFileSystem {
   private static final MethodHandle fOpendir;
   private static final MethodHandle fReaddir;
   private static final MethodHandle fSeekdir;
+  private static final MethodHandle fPread;
 
   private static final VarHandle errnoHandle;
   private static final MemoryAddress errnoAddress;
@@ -255,6 +267,13 @@ public class LocalVFS implements VirtualFileSystem {
                     LibraryLookup.ofDefault().lookup("seekdir").get().address(),
                     MethodType.methodType(void.class, MemoryAddress.class, long.class),
                     FunctionDescriptor.ofVoid(CLinker.C_POINTER, CLinker.C_LONG)
+            );
+
+    fPread = CLinker.getInstance()
+            .downcallHandle(
+                    LibraryLookup.ofDefault().lookup("pread").get().address(),
+                    MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class, long.class),
+                    FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT, CLinker.C_LONG)
             );
   }
 
@@ -465,11 +484,27 @@ public class LocalVFS implements VirtualFileSystem {
   @Override
   public int read(Inode inode, ByteBuffer data, long offset) throws IOException {
     SystemFd fd = getOfLoadRawFd(inode);
-    int n = sysVfs.pread(fd.fd(), data, data.remaining(), offset);
-    checkError(n >= 0);
-    // JNI interface does not updates the position
-    data.position(data.position() + n);
-    return n;
+
+    ByteBuffer bb = data;
+    if (!data.isDirect()) {
+      bb = data.remaining() > MAX_CACHE ? ByteBuffer.allocateDirect(data.remaining()) : BUFFERS.get();
+      bb.clear().limit(data.remaining());
+    }
+
+    try (MemorySegment rawData = MemorySegment.ofByteBuffer(bb)) {
+        int n = (int)fPread.invokeExact(fd.fd(), rawData.address(), data.remaining(), offset);
+        checkError(n >=0);
+        // JNI interface does not updates the position
+        bb.position(data.position() + n);
+        if (!data.isDirect()) {
+          bb.flip();
+          data.put(bb);
+        }
+        return n;
+    } catch (Throwable t) {
+      Throwables.throwIfInstanceOf(t, IOException.class);
+      throw new RuntimeException(t);
+    }
   }
 
   @Override
@@ -925,8 +960,6 @@ public class LocalVFS implements VirtualFileSystem {
     int fchmod(int fd, int mode);
 
     int ftruncate(int fildes, long length);
-
-    int pread(int fd, @Out ByteBuffer buf, int nbyte, long offset);
 
     int pwrite(int fd, @In ByteBuffer buf, int nbyte, long offset);
 
