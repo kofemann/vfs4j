@@ -21,7 +21,6 @@ import java.util.List;
 import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 import javax.annotation.Nonnull;
 import javax.security.auth.Subject;
 
@@ -771,7 +770,7 @@ public class LocalVFS implements VirtualFileSystem {
   }
 
   @Override
-  public Future<Long> copyFileRange(Inode src, long srcPos, Inode dst, long dstPos, long len)
+  public CompletableFuture<Long> copyFileRange(Inode src, long srcPos, Inode dst, long dstPos, long len)
       throws IOException {
 
     SystemFd fdIn = getOfLoadRawFd(src);
