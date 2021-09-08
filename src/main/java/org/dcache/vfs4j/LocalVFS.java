@@ -162,6 +162,7 @@ public class LocalVFS implements VirtualFileSystem {
   private static final MethodHandle fReaddir;
   private static final MethodHandle fSeekdir;
   private static final MethodHandle fPread;
+  private static final MethodHandle fSymlinkat;
 
   private static final VarHandle errnoHandle;
   private static final MemoryAddress errnoAddress;
@@ -273,6 +274,13 @@ public class LocalVFS implements VirtualFileSystem {
                     LibraryLookup.ofDefault().lookup("pread").get().address(),
                     MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class, long.class),
                     FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT, CLinker.C_LONG)
+            );
+
+    fSymlinkat = CLinker.getInstance()
+            .downcallHandle(
+                    LibraryLookup.ofDefault().lookup("symlinkat").get().address(),
+                    MethodType.methodType(int.class, MemoryAddress.class, int.class, MemoryAddress.class),
+                    FunctionDescriptor.of(CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT, CLinker.C_POINTER)
             );
   }
 
@@ -541,7 +549,8 @@ public class LocalVFS implements VirtualFileSystem {
     int gid = (int) UnixSubjects.getPrimaryGid(subject);
 
     try (SystemFd fd = inode2fd(parent, O_DIRECTORY)) {
-      int rc = sysVfs.symlinkat(link, fd.fd(), path);
+
+      int rc = (int)fSymlinkat.invokeExact(CLinker.toCString(link).address(), fd.fd(), CLinker.toCString(path).address());
       checkError(rc == 0);
       Inode inode = lookup(parent, path);
       Stat stat = new Stat();
@@ -552,6 +561,9 @@ public class LocalVFS implements VirtualFileSystem {
         checkError(rc == 0);
       }
       return inode;
+    } catch (Throwable t) {
+      Throwables.throwIfInstanceOf(t, IOException.class);
+      throw new RuntimeException(t);
     }
   }
 
@@ -963,8 +975,6 @@ public class LocalVFS implements VirtualFileSystem {
     int pwrite(int fd, @In ByteBuffer buf, int nbyte, long offset);
 
     int renameat(int oldfd, CharSequence oldPath, int newfd, CharSequence newPath);
-
-    int symlinkat(CharSequence target, int newdirfd, CharSequence linkpath);
 
     int linkat(int fd1, CharSequence path1, int fd2, CharSequence path2, int flag);
 
