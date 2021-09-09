@@ -782,11 +782,17 @@ public class LocalVFS implements VirtualFileSystem {
   }
 
   @Override
-  public CompletableFuture<Long> copyFileRange(Inode src, long srcPos, Inode dst, long dstPos, long len)
-      throws IOException {
+  public CompletableFuture<Long> copyFileRange(Inode src, long srcPos, Inode dst, long dstPos, long len) {
 
-    SystemFd fdIn = getOfLoadRawFd(src);
-    SystemFd fdDst = getOfLoadRawFd(dst);
+    SystemFd fdIn;
+    SystemFd fdDst;
+
+    try {
+      fdIn = getOfLoadRawFd(src);
+      fdDst = getOfLoadRawFd(dst);
+    } catch (IOException e) {
+      return CompletableFuture.failedFuture(e);
+    }
 
     return CompletableFuture.supplyAsync(
             () -> sysVfs.copy_file_range(
