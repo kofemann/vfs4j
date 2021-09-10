@@ -391,12 +391,11 @@ public class LocalVFS implements VirtualFileSystem {
 
   @Override
   public Inode link(Inode parent, Inode link, String path, Subject subject) throws IOException {
-    try (SystemFd dirFd = inode2fd(parent, O_NOFOLLOW | O_DIRECTORY)) {
-      try (SystemFd inodeFd = inode2fd(link, O_NOFOLLOW)) {
-        int rc = sysVfs.linkat(inodeFd.fd(), "", dirFd.fd(), path, AT_EMPTY_PATH);
-        checkError(rc == 0);
-        return lookup(parent, path);
-      }
+    try (SystemFd dirFd = inode2fd(parent, O_NOFOLLOW | O_DIRECTORY);
+         SystemFd inodeFd = inode2fd(link, O_NOFOLLOW)) {
+      int rc = sysVfs.linkat(inodeFd.fd(), "", dirFd.fd(), path, AT_EMPTY_PATH);
+      checkError(rc == 0);
+      return lookup(parent, path);
     }
   }
 
@@ -406,37 +405,35 @@ public class LocalVFS implements VirtualFileSystem {
     TreeSet<DirectoryEntry> list = new TreeSet<>();
     try (SystemFd fd = inode2fd(inode, O_DIRECTORY)) {
 
-      try {
-        MemoryAddress p = (MemoryAddress) fOpendir.invokeExact(fd.fd());
-        checkError(p != MemoryAddress.NULL);
+      MemoryAddress p = (MemoryAddress) fOpendir.invokeExact(fd.fd());
+      checkError(p != MemoryAddress.NULL);
 
-        fSeekdir.invokeExact(p, cookie);
+      fSeekdir.invokeExact(p, cookie);
 
-        while (true) {
-          MemoryAddress dirent = (MemoryAddress) fReaddir.invokeExact(p);
-          if (dirent == MemoryAddress.NULL) {
-            break;
-          }
-
-          var rawDirent = dirent.asSegmentRestricted(DIRENT_LAYOUT.byteSize());
-          ByteBuffer bb = rawDirent.asByteBuffer().order(ByteOrder.nativeOrder());
-
-          long ino = bb.getLong();
-          long off = bb.getLong();
-          int reclen = bb.getShort();
-          byte type = bb.get();
-
-          String name = CLinker.toJavaString(rawDirent.asSlice(8+8+2+1), UTF_8);
-
-          Inode fInode = path2fh(fd.fd(), name, 0).toInode();
-          Stat stat = getattr(fInode);
-          list.add(new DirectoryEntry(name, fInode, stat, off));
+      while (true) {
+        MemoryAddress dirent = (MemoryAddress) fReaddir.invokeExact(p);
+        if (dirent == MemoryAddress.NULL) {
+          break;
         }
-        return new DirectoryStream(DirectoryStream.ZERO_VERIFIER, list);
-      } catch (Throwable t) {
-        Throwables.throwIfInstanceOf(t, IOException.class);
-        throw new RuntimeException(t);
+
+        var rawDirent = dirent.asSegmentRestricted(DIRENT_LAYOUT.byteSize());
+        ByteBuffer bb = rawDirent.asByteBuffer().order(ByteOrder.nativeOrder());
+
+        long ino = bb.getLong();
+        long off = bb.getLong();
+        int reclen = bb.getShort();
+        byte type = bb.get();
+
+        String name = CLinker.toJavaString(rawDirent.asSlice(8+8+2+1), UTF_8);
+
+        Inode fInode = path2fh(fd.fd(), name, 0).toInode();
+        Stat stat = getattr(fInode);
+        list.add(new DirectoryEntry(name, fInode, stat, off));
       }
+      return new DirectoryStream(DirectoryStream.ZERO_VERIFIER, list);
+    } catch (Throwable t) {
+      Throwables.throwIfInstanceOf(t, IOException.class);
+      throw new RuntimeException(t);
     }
   }
 
@@ -531,14 +528,11 @@ public class LocalVFS implements VirtualFileSystem {
       Inode inode = lookup(parent, path);
       Stat stat = getattr(inode);
       int flags = stat.type() == Stat.Type.DIRECTORY ? AT_REMOVEDIR : 0;
-
-      try {
-        int rc = (int)fUnlinkAt.invokeExact(fd.fd(), CLinker.toCString(path).address(), flags);
-        checkError(rc == 0);
-      } catch (Throwable t) {
-        Throwables.throwIfInstanceOf(t, IOException.class);
-        throw new RuntimeException(t);
-      }
+      int rc = (int)fUnlinkAt.invokeExact(fd.fd(), CLinker.toCString(path).address(), flags);
+      checkError(rc == 0);
+    } catch (Throwable t) {
+      Throwables.throwIfInstanceOf(t, IOException.class);
+      throw new RuntimeException(t);
     }
   }
 
@@ -825,17 +819,16 @@ public class LocalVFS implements VirtualFileSystem {
         MemorySegment mntId = MemorySegment.allocateNative(Integer.BYTES)){
 
       bytes.asByteBuffer().order(ByteOrder.nativeOrder()).putInt(0, (int)bytes.byteSize());
-      int rc;
-      try {
-        rc = (int)fNameToHandleAt.invokeExact(fd, str.address(), bytes.address(), mntId.address(), flags);
-      } catch (Throwable t) {
-        throw new RuntimeException(t);
-      }
 
+      int rc = (int)fNameToHandleAt.invokeExact(fd, str.address(), bytes.address(), mntId.address(), flags);
       checkError(rc == 0);
+
       KernelFileHandle fh = new KernelFileHandle(bytes.toByteArray());
       LOG.debug("path = [{}], handle = {}", path, fh);
       return fh;
+    } catch (Throwable t) {
+      Throwables.throwIfInstanceOf(t, IOException.class);
+      throw new RuntimeException(t);
     }
   }
 
@@ -881,16 +874,16 @@ public class LocalVFS implements VirtualFileSystem {
 
   private SystemFd inode2fd(Inode inode, int flags) throws IOException {
     KernelFileHandle fh = new KernelFileHandle(inode);
-    int fd;
     byte[] fhBytes = fh.toBytes();
     try (MemorySegment rawHandle = MemorySegment.allocateNative(fhBytes.length)){
       rawHandle.asByteBuffer().put(fhBytes);
-      fd = (int)fOpenByHandleAt.invokeExact(rootFd, rawHandle.address(), flags);
+      int fd = (int) fOpenByHandleAt.invokeExact(rootFd, rawHandle.address(), flags);
+      checkError(fd >= 0);
+      return new SystemFd(fd);
     } catch (Throwable t) {
+      Throwables.throwIfInstanceOf(t, IOException.class);
       throw new RuntimeException(t);
     }
-    checkError(fd >= 0);
-    return new SystemFd(fd);
   }
 
   private Stat statByFd(SystemFd fd) throws IOException {
