@@ -163,6 +163,7 @@ public class LocalVFS implements VirtualFileSystem {
   private static final MethodHandle fSeekdir;
   private static final MethodHandle fPread;
   private static final MethodHandle fSymlinkat;
+  private static final MethodHandle fRenameat;
 
   private static final MethodHandle fErrono;
 
@@ -287,6 +288,14 @@ public class LocalVFS implements VirtualFileSystem {
                     MethodType.methodType(int.class, MemoryAddress.class, int.class, MemoryAddress.class),
                     FunctionDescriptor.of(CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT, CLinker.C_POINTER)
             );
+
+    fRenameat = CLinker.getInstance()
+            .downcallHandle(
+                    LibraryLookup.ofDefault().lookup("renameat").get().address(),
+                    MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class, MemoryAddress.class),
+                    FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT, CLinker.C_POINTER)
+            );
+
   }
 
   public LocalVFS(File root) throws IOException {
@@ -467,13 +476,18 @@ public class LocalVFS implements VirtualFileSystem {
 
   @Override
   public boolean move(Inode src, String oldName, Inode dest, String newName) throws IOException {
-    try (SystemFd fd1 = inode2fd(src, O_NOFOLLOW | O_DIRECTORY)) {
-      try (SystemFd fd2 = inode2fd(dest, O_NOFOLLOW | O_DIRECTORY)) {
-        int rc = sysVfs.renameat(fd1.fd(), oldName, fd2.fd(), newName);
+    try (SystemFd fd1 = inode2fd(src, O_PATH | O_NOACCESS );
+         SystemFd fd2 = inode2fd(dest, O_PATH | O_NOACCESS);
+         MemorySegment newNameRaw = CLinker.toCString(newName);
+        MemorySegment oldNameRaw = CLinker.toCString(oldName)) {
+
+        int rc = (int)fRenameat.invokeExact(fd1.fd(), oldNameRaw.address(), fd2.fd(), newNameRaw.address());
         checkError(rc == 0);
         return true;
+      } catch (Throwable t) {
+        Throwables.throwIfInstanceOf(t, IOException.class);
+        throw new RuntimeException(t);
       }
-    }
   }
 
   @Override
@@ -971,8 +985,6 @@ public class LocalVFS implements VirtualFileSystem {
     int ftruncate(int fildes, long length);
 
     int pwrite(int fd, @In ByteBuffer buf, int nbyte, long offset);
-
-    int renameat(int oldfd, CharSequence oldPath, int newfd, CharSequence newPath);
 
     int linkat(int fd1, CharSequence path1, int fd2, CharSequence path2, int flag);
 
