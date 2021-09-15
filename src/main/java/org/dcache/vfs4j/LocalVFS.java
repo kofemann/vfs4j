@@ -75,6 +75,7 @@ public class LocalVFS implements VirtualFileSystem {
   private static final int O_RDONLY = 00;
   private static final int O_WRONLY = 01;
   private static final int O_RDWR = 02;
+  private static final int O_NOACCESS = 00000003;
 
   private static final int O_PATH = 010000000;
   private static final int O_NOFOLLOW = 0400000;
@@ -154,7 +155,7 @@ public class LocalVFS implements VirtualFileSystem {
   private static final MethodHandle fOpenByHandleAt;
   private static final MethodHandle fSync;
   private static final MethodHandle fDataSync;
-  private static final MethodHandle fStat;
+  private static final MethodHandle fStatat;
   private static final MethodHandle fStatFs;
   private static final MethodHandle fUnlinkAt;
   private static final MethodHandle fOpendir;
@@ -231,11 +232,11 @@ public class LocalVFS implements VirtualFileSystem {
                     FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT)
             );
 
-    fStat = CLinker.getInstance()
+    fStatat = CLinker.getInstance()
             .downcallHandle(
-                    LibraryLookup.ofDefault().lookup("__fxstat64").get().address(),
-                    MethodType.methodType(int.class, int.class, int.class, MemoryAddress.class),
-                    FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER)
+                    LibraryLookup.ofDefault().lookup("fstatat").get().address(),
+                    MethodType.methodType(int.class, int.class, MemoryAddress.class, MemoryAddress.class, int.class),
+                    FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_POINTER, CLinker.C_INT)
             );
 
     fStatFs = CLinker.getInstance()
@@ -388,7 +389,7 @@ public class LocalVFS implements VirtualFileSystem {
 
   @Override
   public Inode lookup(Inode parent, String path) throws IOException {
-    try (SystemFd fd = inode2fd(parent, O_DIRECTORY | O_PATH)) {
+    try (SystemFd fd = inode2fd(parent, O_PATH | O_NOACCESS )) {
       return path2fh(fd.fd(), path, 0).toInode();
     }
   }
@@ -888,10 +889,8 @@ public class LocalVFS implements VirtualFileSystem {
 
   private Stat statByFd(SystemFd fd) throws IOException {
 
-    int rc;
-
-    try(MemorySegment rawStat = MemorySegment.allocateNative(STAT_LAYOUT)) {
-      rc = (int)fStat.invokeExact(0, fd.fd(), rawStat.address());
+    try(MemorySegment rawStat = MemorySegment.allocateNative(STAT_LAYOUT); MemorySegment emptyString = CLinker.toCString("")) {
+      int rc = (int)fStatat.invokeExact(fd.fd(), emptyString.address(), rawStat.address(), AT_EMPTY_PATH);
 
       checkError(rc == 0);
       return toVfsStat(rawStat);
