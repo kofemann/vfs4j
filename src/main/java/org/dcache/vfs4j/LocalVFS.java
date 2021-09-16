@@ -30,6 +30,7 @@ import jdk.incubator.foreign.LibraryLookup;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
+import jdk.incubator.foreign.NativeScope;
 import jnr.ffi.byref.LongLongByReference;
 import jnr.ffi.provider.FFIProvider;
 import jnr.constants.platform.Errno;
@@ -164,6 +165,7 @@ public class LocalVFS implements VirtualFileSystem {
   private static final MethodHandle fPread;
   private static final MethodHandle fSymlinkat;
   private static final MethodHandle fRenameat;
+  private static final MethodHandle fReadlinkat;
 
   private static final MethodHandle fErrono;
 
@@ -279,6 +281,13 @@ public class LocalVFS implements VirtualFileSystem {
                     MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class, MemoryAddress.class),
                     FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT, CLinker.C_POINTER)
             );
+
+    fReadlinkat = C_LINKER.downcallHandle(
+            LibraryLookup.ofDefault().lookup("readlinkat").get().address(),
+            MethodType.methodType(int.class, int.class, MemoryAddress.class, MemoryAddress.class, int.class),
+            FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_POINTER, CLinker.C_INT)
+    );
+
   }
 
   public LocalVFS(File root) throws IOException {
@@ -515,12 +524,21 @@ public class LocalVFS implements VirtualFileSystem {
 
   @Override
   public String readlink(Inode inode) throws IOException {
-    try (SystemFd fd = inode2fd(inode, O_PATH | O_NOFOLLOW)) {
+    try (SystemFd fd = inode2fd(inode, O_PATH | O_NOFOLLOW);
+         MemorySegment emptyString = CLinker.toCString("");
+        var scope = NativeScope.unboundedScope()) {
+
       Stat stat = statByFd(fd);
-      byte[] buf = new byte[(int) stat.getSize()];
-      int rc = sysVfs.readlinkat(fd.fd(), "", buf, buf.length);
+      var link = scope.allocate(stat.getSize());
+
+      int rc = (int)fReadlinkat.invokeExact(fd.fd(), emptyString.address(), link.address(), (int)stat.getSize());
       checkError(rc >= 0);
-      return new String(buf, UTF_8);
+
+      return CLinker.toJavaStringRestricted(link.address(), UTF_8);
+
+    } catch (Throwable t) {
+      Throwables.throwIfInstanceOf(t, IOException.class);
+      throw new RuntimeException(t);
     }
   }
 
@@ -958,8 +976,6 @@ public class LocalVFS implements VirtualFileSystem {
   public interface SysVfs {
 
     int ioctl(int fd, int request, @Out @In byte[] fh);
-
-    int readlinkat(int fd, CharSequence path, @Out byte[] buf, int len);
 
     int mkdirat(int fd, CharSequence path, int mode);
 
