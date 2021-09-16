@@ -166,6 +166,7 @@ public class LocalVFS implements VirtualFileSystem {
   private static final MethodHandle fSymlinkat;
   private static final MethodHandle fRenameat;
   private static final MethodHandle fReadlinkat;
+  private static final MethodHandle fChownat;
 
   private static final MethodHandle fErrono;
 
@@ -288,6 +289,12 @@ public class LocalVFS implements VirtualFileSystem {
             FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_POINTER, CLinker.C_INT)
     );
 
+    fChownat = C_LINKER.downcallHandle(
+            LibraryLookup.ofDefault().lookup("fchownat").get().address(),
+            MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class, int.class, int.class),
+            FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT, CLinker.C_INT, CLinker.C_INT)
+    );
+
   }
 
   public LocalVFS(File root) throws IOException {
@@ -323,13 +330,14 @@ public class LocalVFS implements VirtualFileSystem {
       throw new NotSuppException("create of this type not supported");
     }
 
-    try (SystemFd fd = inode2fd(parent, O_NOFOLLOW | O_DIRECTORY)) {
+    try (SystemFd fd = inode2fd(parent, O_NOFOLLOW | O_DIRECTORY);  var emptyString = CLinker.toCString("");
+         var pathRaw = CLinker.toCString(path)) {
 
       int rc;
       if (type == Stat.Type.REGULAR) {
-        int rfd = openat(fd.fd(), path, O_EXCL | O_CREAT | O_RDWR, mode);
+        int rfd =  (int)fOpenAt.invokeExact(fd.fd(), pathRaw.address(), O_EXCL | O_CREAT | O_RDWR, mode);
         checkError(rfd >= 0);
-        rc = sysVfs.fchownat(rfd, "", uid, gid, AT_EMPTY_PATH);
+        rc = (int)fChownat.invokeExact(rfd, emptyString.address(), uid, gid, AT_EMPTY_PATH);
         checkError(rc == 0);
 
         Inode inode = path2fh(rfd, "", AT_EMPTY_PATH).toInode();
@@ -343,10 +351,13 @@ public class LocalVFS implements VirtualFileSystem {
         LongLongByReference dev = new LongLongByReference(type == Stat.Type.BLOCK || type == Stat.Type.CHAR ? 1 : 0);
         rc = sysVfs.__xmknodat(0, fd.fd(), path,  mode | type.toMode(), dev);
         checkError(rc >= 0);
-        rc = sysVfs.fchownat(fd.fd(), path, uid, gid, 0);
+        rc = (int)fChownat.invokeExact(fd.fd(), pathRaw.address(), uid, gid, 0);
         checkError(rc >= 0);
         return path2fh(fd.fd(), path, 0).toInode();
       }
+    } catch (Throwable t) {
+      Throwables.throwIfInstanceOf(t, IOException.class);
+      throw new RuntimeException(t);
     }
   }
 
@@ -458,11 +469,14 @@ public class LocalVFS implements VirtualFileSystem {
       int rc = sysVfs.mkdirat(fd.fd(), path, mode);
       checkError(rc == 0);
       inode = lookup(parent, path);
-      try (SystemFd fd1 = inode2fd(inode, O_NOFOLLOW | O_DIRECTORY)) {
-        rc = sysVfs.fchownat(fd1.fd(), "", uid, gid, AT_EMPTY_PATH);
+      try (SystemFd fd1 = inode2fd(inode, O_NOFOLLOW | O_DIRECTORY); var emptyString = CLinker.toCString("")) {
+        rc = (int)fChownat.invokeExact(fd1.fd(), emptyString.address(), uid, gid, AT_EMPTY_PATH);
         checkError(rc == 0);
+        return inode;
+      }  catch (Throwable t) {
+        Throwables.throwIfInstanceOf(t, IOException.class);
+        throw new RuntimeException(t);
       }
-      return inode;
     }
   }
 
@@ -572,8 +586,8 @@ public class LocalVFS implements VirtualFileSystem {
       Stat stat = new Stat();
       stat.setUid(uid);
       stat.setGid(gid);
-      try (SystemFd fd1 = inode2fd(inode, O_PATH)) {
-        rc = sysVfs.fchownat(fd1.fd(), "", uid, gid, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW);
+      try (SystemFd fd1 = inode2fd(inode, O_PATH); var emptyString = CLinker.toCString("")) {
+        rc = (int)fChownat.invokeExact(fd1.fd(), emptyString.address(), uid, gid, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW);
         checkError(rc == 0);
       }
       return inode;
@@ -656,7 +670,7 @@ public class LocalVFS implements VirtualFileSystem {
       openMode |= O_RDWR;
     }
 
-    try (SystemFd fd = inode2fd(inode, openMode)) {
+    try (SystemFd fd = inode2fd(inode, openMode); var emptyString = CLinker.toCString("")) {
       int uid = -1;
       int gid = -1;
       int rc;
@@ -670,7 +684,7 @@ public class LocalVFS implements VirtualFileSystem {
       }
 
       if (uid != -1 || gid != -1) {
-        rc = sysVfs.fchownat(fd.fd(), "", uid, gid, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW);
+        rc = (int)fChownat.invokeExact(fd.fd(), emptyString.address(), uid, gid, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW);
         checkError(rc == 0);
       }
 
@@ -685,6 +699,9 @@ public class LocalVFS implements VirtualFileSystem {
         rc = sysVfs.ftruncate(fd.fd(), stat.getSize());
         checkError(rc == 0);
       }
+    } catch (Throwable t) {
+      Throwables.throwIfInstanceOf(t, IOException.class);
+      throw new RuntimeException(t);
     }
   }
 
@@ -978,8 +995,6 @@ public class LocalVFS implements VirtualFileSystem {
     int ioctl(int fd, int request, @Out @In byte[] fh);
 
     int mkdirat(int fd, CharSequence path, int mode);
-
-    int fchownat(int fd, CharSequence path, int uid, int gid, int flags);
 
     int fchmod(int fd, int mode);
 
