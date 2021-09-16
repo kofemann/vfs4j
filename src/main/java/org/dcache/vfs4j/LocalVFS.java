@@ -167,135 +167,118 @@ public class LocalVFS implements VirtualFileSystem {
 
   private static final MethodHandle fErrono;
 
+  private static final CLinker C_LINKER = CLinker.getInstance();
+
   static {
 
     // magic function that return pointer to errno variable
-    fErrono = CLinker.getInstance()
-            .downcallHandle(
+    fErrono = C_LINKER.downcallHandle(
                     LibraryLookup.ofDefault().lookup("__errno_location").get().address(),
                     MethodType.methodType(MemoryAddress.class),
                     FunctionDescriptor.of(CLinker.C_POINTER)
             );
 
-    fStrerror = CLinker.getInstance()
-            .downcallHandle(
+    fStrerror = C_LINKER.downcallHandle(
                     LibraryLookup.ofDefault().lookup("strerror").get().address(),
                     MethodType.methodType(MemoryAddress.class, int.class),
                     FunctionDescriptor.of(CLinker.C_POINTER, CLinker.C_INT)
             );
 
-    fOpen = CLinker.getInstance()
-            .downcallHandle(
+    fOpen = C_LINKER.downcallHandle(
                     LibraryLookup.ofDefault().lookup("open").get().address(),
                     MethodType.methodType(int.class, MemoryAddress.class, int.class, int.class),
                     FunctionDescriptor.of(CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT, CLinker.C_INT)
             );
 
-    fOpenAt = CLinker.getInstance()
-            .downcallHandle(
+    fOpenAt = C_LINKER.downcallHandle(
                     LibraryLookup.ofDefault().lookup("openat").get().address(),
                     MethodType.methodType(int.class, int.class,  MemoryAddress.class, int.class, int.class),
                     FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT, CLinker.C_INT)
             );
 
-    fClose = CLinker.getInstance()
-            .downcallHandle(
+    fClose = C_LINKER.downcallHandle(
                     LibraryLookup.ofDefault().lookup("close").get().address(),
                     MethodType.methodType(int.class, int.class),
                     FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT)
             );
 
-    fNameToHandleAt = CLinker.getInstance()
-            .downcallHandle(
+    fNameToHandleAt = C_LINKER.downcallHandle(
                     LibraryLookup.ofDefault().lookup("name_to_handle_at").get().address(),
                     MethodType.methodType(int.class, int.class, MemoryAddress.class, MemoryAddress.class, MemoryAddress.class, int.class),
                     FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_POINTER, CLinker.C_POINTER, CLinker.C_INT)
             );
 
-    fOpenByHandleAt = CLinker.getInstance()
-            .downcallHandle(
+    fOpenByHandleAt = C_LINKER.downcallHandle(
                     LibraryLookup.ofDefault().lookup("open_by_handle_at").get().address(),
                     MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class),
                     FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT)
             );
 
-    fDataSync = CLinker.getInstance()
-            .downcallHandle(
+    fDataSync = C_LINKER.downcallHandle(
                     LibraryLookup.ofDefault().lookup("fdatasync").get().address(),
                     MethodType.methodType(int.class, int.class),
                     FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT)
             );
 
-    fSync = CLinker.getInstance()
-            .downcallHandle(
+    fSync = C_LINKER.downcallHandle(
                     LibraryLookup.ofDefault().lookup("fsync").get().address(),
                     MethodType.methodType(int.class, int.class),
                     FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT)
             );
 
-    fStatat = CLinker.getInstance()
-            .downcallHandle(
+    fStatat = C_LINKER.downcallHandle(
                     LibraryLookup.ofDefault().lookup("fstatat").get().address(),
                     MethodType.methodType(int.class, int.class, MemoryAddress.class, MemoryAddress.class, int.class),
                     FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_POINTER, CLinker.C_INT)
             );
 
-    fStatFs = CLinker.getInstance()
-            .downcallHandle(
+    fStatFs = C_LINKER.downcallHandle(
                     LibraryLookup.ofDefault().lookup("fstatfs").get().address(),
                     MethodType.methodType(int.class, int.class, MemoryAddress.class),
                     FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER)
             );
 
-    fUnlinkAt = CLinker.getInstance()
-            .downcallHandle(
+    fUnlinkAt = C_LINKER.downcallHandle(
                     LibraryLookup.ofDefault().lookup("unlinkat").get().address(),
                     MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class),
                     FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT)
             );
 
-    fOpendir = CLinker.getInstance()
-            .downcallHandle(
+    fOpendir = C_LINKER.downcallHandle(
                     LibraryLookup.ofDefault().lookup("fdopendir").get().address(),
                     MethodType.methodType(MemoryAddress.class, int.class),
                     FunctionDescriptor.of(CLinker.C_POINTER, CLinker.C_INT)
             );
 
-    fReaddir = CLinker.getInstance()
-            .downcallHandle(
+    fReaddir = C_LINKER.downcallHandle(
                     LibraryLookup.ofDefault().lookup("readdir").get().address(),
                     MethodType.methodType(MemoryAddress.class, MemoryAddress.class),
                     FunctionDescriptor.of(CLinker.C_POINTER, CLinker.C_POINTER)
             );
 
-    fSeekdir = CLinker.getInstance()
-            .downcallHandle(
+    fSeekdir = C_LINKER.downcallHandle(
                     LibraryLookup.ofDefault().lookup("seekdir").get().address(),
                     MethodType.methodType(void.class, MemoryAddress.class, long.class),
                     FunctionDescriptor.ofVoid(CLinker.C_POINTER, CLinker.C_LONG)
             );
 
-    fPread = CLinker.getInstance()
-            .downcallHandle(
+    fPread = C_LINKER.downcallHandle(
                     LibraryLookup.ofDefault().lookup("pread").get().address(),
                     MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class, long.class),
                     FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT, CLinker.C_LONG)
             );
 
-    fSymlinkat = CLinker.getInstance()
-            .downcallHandle(
+    fSymlinkat = C_LINKER.downcallHandle(
                     LibraryLookup.ofDefault().lookup("symlinkat").get().address(),
                     MethodType.methodType(int.class, MemoryAddress.class, int.class, MemoryAddress.class),
                     FunctionDescriptor.of(CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT, CLinker.C_POINTER)
             );
 
-    fRenameat = CLinker.getInstance()
-            .downcallHandle(
+    fRenameat = C_LINKER.downcallHandle(
                     LibraryLookup.ofDefault().lookup("renameat").get().address(),
                     MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class, MemoryAddress.class),
                     FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT, CLinker.C_POINTER)
             );
-
   }
 
   public LocalVFS(File root) throws IOException {
