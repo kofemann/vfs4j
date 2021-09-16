@@ -543,11 +543,11 @@ public class LocalVFS implements VirtualFileSystem {
 
   @Override
   public void remove(Inode parent, String path) throws IOException {
-    try (SystemFd fd = inode2fd(parent, O_PATH | O_DIRECTORY)) {
+    try (SystemFd fd = inode2fd(parent, O_PATH | O_DIRECTORY); MemorySegment pathRaw = CLinker.toCString(path)) {
       Inode inode = lookup(parent, path);
       Stat stat = getattr(inode);
       int flags = stat.type() == Stat.Type.DIRECTORY ? AT_REMOVEDIR : 0;
-      int rc = (int)fUnlinkAt.invokeExact(fd.fd(), CLinker.toCString(path).address(), flags);
+      int rc = (int)fUnlinkAt.invokeExact(fd.fd(), pathRaw.address(), flags);
       checkError(rc == 0);
     } catch (Throwable t) {
       Throwables.throwIfInstanceOf(t, IOException.class);
@@ -561,9 +561,11 @@ public class LocalVFS implements VirtualFileSystem {
     int uid = (int) UnixSubjects.getUid(subject);
     int gid = (int) UnixSubjects.getPrimaryGid(subject);
 
-    try (SystemFd fd = inode2fd(parent, O_DIRECTORY)) {
+    try (SystemFd fd = inode2fd(parent, O_DIRECTORY);
+         MemorySegment linkRaw = CLinker.toCString(link);
+         MemorySegment pathRaw = CLinker.toCString(path)) {
 
-      int rc = (int)fSymlinkat.invokeExact(CLinker.toCString(link).address(), fd.fd(), CLinker.toCString(path).address());
+      int rc = (int)fSymlinkat.invokeExact(linkRaw.address(), fd.fd(), pathRaw.address());
       checkError(rc == 0);
       Inode inode = lookup(parent, path);
       Stat stat = new Stat();
