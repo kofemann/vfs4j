@@ -1037,14 +1037,6 @@ public class LocalVFS implements VirtualFileSystem {
     }
   }
 
-  private int openat(int fd, String name, int flags, int mode) {
-    try(MemorySegment str = CLinker.toCString(name)){
-      return (int)fOpenAt.invokeExact(fd, str.address(), flags, mode);
-    } catch (Throwable t) {
-      throw new RuntimeException(t);
-    }
-  }
-
   private int close(int fd) {
     try{
       return (int)fClose.invokeExact(fd);
