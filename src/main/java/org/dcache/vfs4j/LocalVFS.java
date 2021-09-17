@@ -167,6 +167,7 @@ public class LocalVFS implements VirtualFileSystem {
   private static final MethodHandle fRenameat;
   private static final MethodHandle fReadlinkat;
   private static final MethodHandle fChownat;
+  private static final MethodHandle fMkdirat;
 
   private static final MethodHandle fErrono;
 
@@ -293,6 +294,12 @@ public class LocalVFS implements VirtualFileSystem {
             LibraryLookup.ofDefault().lookup("fchownat").get().address(),
             MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class, int.class, int.class),
             FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT, CLinker.C_INT, CLinker.C_INT)
+    );
+
+    fMkdirat = C_LINKER.downcallHandle(
+            LibraryLookup.ofDefault().lookup("mkdirat").get().address(),
+            MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class),
+            FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT)
     );
 
   }
@@ -465,18 +472,18 @@ public class LocalVFS implements VirtualFileSystem {
     int gid = (int) UnixSubjects.getPrimaryGid(subject);
 
     Inode inode;
-    try (SystemFd fd = inode2fd(parent, O_PATH | O_NOFOLLOW | O_DIRECTORY)) {
-      int rc = sysVfs.mkdirat(fd.fd(), path, mode);
+    try (SystemFd fd = inode2fd(parent, O_PATH | O_NOFOLLOW | O_DIRECTORY); var pathRaw = CLinker.toCString(path)) {
+      int rc = (int)fMkdirat.invokeExact(fd.fd(), pathRaw.address(), mode);
       checkError(rc == 0);
       inode = lookup(parent, path);
       try (SystemFd fd1 = inode2fd(inode, O_NOFOLLOW | O_DIRECTORY); var emptyString = CLinker.toCString("")) {
         rc = (int)fChownat.invokeExact(fd1.fd(), emptyString.address(), uid, gid, AT_EMPTY_PATH);
         checkError(rc == 0);
         return inode;
-      }  catch (Throwable t) {
-        Throwables.throwIfInstanceOf(t, IOException.class);
-        throw new RuntimeException(t);
       }
+    } catch (Throwable t) {
+      Throwables.throwIfInstanceOf(t, IOException.class);
+      throw new RuntimeException(t);
     }
   }
 
@@ -993,8 +1000,6 @@ public class LocalVFS implements VirtualFileSystem {
   public interface SysVfs {
 
     int ioctl(int fd, int request, @Out @In byte[] fh);
-
-    int mkdirat(int fd, CharSequence path, int mode);
 
     int fchmod(int fd, int mode);
 
