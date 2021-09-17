@@ -169,6 +169,7 @@ public class LocalVFS implements VirtualFileSystem {
   private static final MethodHandle fChownat;
   private static final MethodHandle fMkdirat;
   private static final MethodHandle fChmod;
+  private static final MethodHandle fFtruncate;
 
   private static final MethodHandle fErrono;
 
@@ -309,6 +310,11 @@ public class LocalVFS implements VirtualFileSystem {
             FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_INT)
     );
 
+    fFtruncate = C_LINKER.downcallHandle(
+            LibraryLookup.ofDefault().lookup("ftruncate").get().address(),
+            MethodType.methodType(int.class, int.class, long.class),
+            FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_LONG_LONG)
+    );
   }
 
   public LocalVFS(File root) throws IOException {
@@ -710,7 +716,7 @@ public class LocalVFS implements VirtualFileSystem {
       }
 
       if (stat.isDefined(Stat.StatAttribute.SIZE)) {
-        rc = sysVfs.ftruncate(fd.fd(), stat.getSize());
+        rc = (int)fFtruncate.invokeExact(fd.fd(), stat.getSize());
         checkError(rc == 0);
       }
     } catch (Throwable t) {
@@ -1007,8 +1013,6 @@ public class LocalVFS implements VirtualFileSystem {
   public interface SysVfs {
 
     int ioctl(int fd, int request, @Out @In byte[] fh);
-
-    int ftruncate(int fildes, long length);
 
     int pwrite(int fd, @In ByteBuffer buf, int nbyte, long offset);
 
