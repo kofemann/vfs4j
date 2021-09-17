@@ -168,6 +168,7 @@ public class LocalVFS implements VirtualFileSystem {
   private static final MethodHandle fReadlinkat;
   private static final MethodHandle fChownat;
   private static final MethodHandle fMkdirat;
+  private static final MethodHandle fChmod;
 
   private static final MethodHandle fErrono;
 
@@ -300,6 +301,12 @@ public class LocalVFS implements VirtualFileSystem {
             LibraryLookup.ofDefault().lookup("mkdirat").get().address(),
             MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class),
             FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT)
+    );
+
+    fChmod = C_LINKER.downcallHandle(
+            LibraryLookup.ofDefault().lookup("fchmod").get().address(),
+            MethodType.methodType(int.class, int.class, int.class),
+            FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_INT)
     );
 
   }
@@ -697,7 +704,7 @@ public class LocalVFS implements VirtualFileSystem {
 
       if (currentStat.type() != Stat.Type.SYMLINK) {
         if (stat.isDefined(Stat.StatAttribute.MODE)) {
-          rc = sysVfs.fchmod(fd.fd(), stat.getMode());
+          rc = (int)fChmod.invokeExact(fd.fd(), stat.getMode());
           checkError(rc == 0);
         }
       }
@@ -1000,8 +1007,6 @@ public class LocalVFS implements VirtualFileSystem {
   public interface SysVfs {
 
     int ioctl(int fd, int request, @Out @In byte[] fh);
-
-    int fchmod(int fd, int mode);
 
     int ftruncate(int fildes, long length);
 
