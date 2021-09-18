@@ -170,6 +170,7 @@ public class LocalVFS implements VirtualFileSystem {
   private static final MethodHandle fMkdirat;
   private static final MethodHandle fChmod;
   private static final MethodHandle fFtruncate;
+  private static final MethodHandle fLinkat;
 
   private static final MethodHandle fErrono;
 
@@ -315,6 +316,13 @@ public class LocalVFS implements VirtualFileSystem {
             MethodType.methodType(int.class, int.class, long.class),
             FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_LONG_LONG)
     );
+
+    fLinkat = C_LINKER.downcallHandle(
+            LibraryLookup.ofDefault().lookup("linkat").get().address(),
+            MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class, MemoryAddress.class, int.class),
+            FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT)
+    );
+
   }
 
   public LocalVFS(File root) throws IOException {
@@ -429,10 +437,15 @@ public class LocalVFS implements VirtualFileSystem {
   @Override
   public Inode link(Inode parent, Inode link, String path, Subject subject) throws IOException {
     try (SystemFd dirFd = inode2fd(parent, O_NOFOLLOW | O_DIRECTORY);
-         SystemFd inodeFd = inode2fd(link, O_NOFOLLOW)) {
-      int rc = sysVfs.linkat(inodeFd.fd(), "", dirFd.fd(), path, AT_EMPTY_PATH);
+         SystemFd inodeFd = inode2fd(link, O_NOFOLLOW); var emptyString = CLinker.toCString("");
+         var pathRaw = CLinker.toCString(path)) {
+      int rc = (int)fLinkat.invokeExact(inodeFd.fd(), emptyString.address(), dirFd.fd(), pathRaw.address(), AT_EMPTY_PATH);
+
       checkError(rc == 0);
       return lookup(parent, path);
+    }  catch (Throwable t) {
+      Throwables.throwIfInstanceOf(t, IOException.class);
+      throw new RuntimeException(t);
     }
   }
 
@@ -1015,8 +1028,6 @@ public class LocalVFS implements VirtualFileSystem {
     int ioctl(int fd, int request, @Out @In byte[] fh);
 
     int pwrite(int fd, @In ByteBuffer buf, int nbyte, long offset);
-
-    int linkat(int fd1, CharSequence path1, int fd2, CharSequence path2, int flag);
 
     int flistxattr(int fd, @Out byte[] buf, int size);
 
