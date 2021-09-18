@@ -19,6 +19,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import javax.annotation.Nonnull;
 import javax.security.auth.Subject;
@@ -172,6 +173,7 @@ public class LocalVFS implements VirtualFileSystem {
   private static final MethodHandle fFtruncate;
   private static final MethodHandle fLinkat;
   private static final MethodHandle fPwrite;
+  private static final MethodHandle fCopyFileRange;
 
   private static final MethodHandle fErrono;
 
@@ -330,6 +332,11 @@ public class LocalVFS implements VirtualFileSystem {
             FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT)
     );
 
+    fCopyFileRange = C_LINKER.downcallHandle(
+            LibraryLookup.ofDefault().lookup("copy_file_range").get().address(),
+            MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class, MemoryAddress.class, long.class, int.class),
+            FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_LONG_LONG, CLinker.C_INT)
+    );
   }
 
   public LocalVFS(File root) throws IOException {
@@ -873,9 +880,20 @@ public class LocalVFS implements VirtualFileSystem {
     }
 
     return CompletableFuture.supplyAsync(
-            () -> sysVfs.copy_file_range(
-                    fdIn.fd(), new LongLongByReference(srcPos),
-            fdDst.fd(), new LongLongByReference(dstPos), len, 0)
+            () -> {
+              try (var srcPosRef = MemorySegment.allocateNative(Long.BYTES);
+                   var dstPosRef = MemorySegment.allocateNative(Long.BYTES)) {
+
+                srcPosRef.asByteBuffer().order(ByteOrder.nativeOrder()).putLong(0, srcPos);
+                dstPosRef.asByteBuffer().order(ByteOrder.nativeOrder()).putLong(0, dstPos);
+
+                return (int)fCopyFileRange.invokeExact(
+                        fdIn.fd(), srcPosRef.address(),
+                fdDst.fd(), dstPosRef.address(), len, 0);
+              } catch (Throwable e) {
+                throw new CompletionException(e);
+              }
+            }
     ).thenCompose(rc -> {
         try {
           checkError(rc >= 0);
@@ -1049,8 +1067,6 @@ public class LocalVFS implements VirtualFileSystem {
 
     int __xmknodat(int version, int fd, CharSequence name, int mode, @In @Out LongLongByReference dev);
 
-    int copy_file_range(int fd_in, @In @Out LongLongByReference off_in,
-                        int fd_out, @In @Out LongLongByReference off_out, long count, int flags);
   }
 
 
