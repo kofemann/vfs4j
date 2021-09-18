@@ -171,6 +171,7 @@ public class LocalVFS implements VirtualFileSystem {
   private static final MethodHandle fChmod;
   private static final MethodHandle fFtruncate;
   private static final MethodHandle fLinkat;
+  private static final MethodHandle fPwrite;
 
   private static final MethodHandle fErrono;
 
@@ -274,6 +275,12 @@ public class LocalVFS implements VirtualFileSystem {
                     MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class, long.class),
                     FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT, CLinker.C_LONG)
             );
+
+    fPwrite = C_LINKER.downcallHandle(
+            LibraryLookup.ofDefault().lookup("pwrite").get().address(),
+            MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class, long.class),
+            FunctionDescriptor.of(CLinker.C_INT, CLinker.C_INT, CLinker.C_POINTER, CLinker.C_INT, CLinker.C_LONG_LONG)
+    );
 
     fSymlinkat = C_LINKER.downcallHandle(
                     LibraryLookup.ofDefault().lookup("symlinkat").get().address(),
@@ -641,37 +648,42 @@ public class LocalVFS implements VirtualFileSystem {
   public WriteResult write(Inode inode, ByteBuffer data, long offset, StabilityLevel stabilityLevel)
       throws IOException {
     SystemFd fd = getOfLoadRawFd(inode);
-    int n = sysVfs.pwrite(fd.fd(), data, data.remaining(), offset);
-    checkError(n >= 0);
 
-    // JNI interface does not updates the position
-    data.position(data.position() + n);
-
-    int rc = 0;
-    switch (stabilityLevel) {
-      case UNSTABLE:
-        // NOP
-        break;
-      case DATA_SYNC:
-        try {
-          rc = (int)fDataSync.invokeExact(fd.fd());
-        } catch (Throwable t) {
-          throw new RuntimeException(t);
-        }
-        break;
-      case FILE_SYNC:
-        try {
-          rc = (int)fSync.invokeExact(fd.fd());
-        } catch (Throwable t) {
-          throw new RuntimeException(t);
-        }
-
-        break;
-      default:
-        throw new RuntimeException("bad sync type");
+    ByteBuffer bb = data;
+    if (!data.isDirect()) {
+      bb = data.remaining() > MAX_CACHE ? ByteBuffer.allocateDirect(data.remaining()) : BUFFERS.get();
+      bb.clear().put(data).flip();
     }
-    checkError(rc == 0);
-    return new WriteResult(stabilityLevel, n);
+
+    try (MemorySegment dataRaw = MemorySegment.ofByteBuffer(bb)) {
+      int n = (int)fPwrite.invokeExact(fd.fd(), dataRaw.address(), bb.remaining(), offset);
+      checkError(n >= 0);
+
+      // JNI interface does not updates the position
+      if (data.isDirect()) {
+        data.position(data.position() + n);
+      }
+
+      int rc = 0;
+      switch (stabilityLevel) {
+        case UNSTABLE:
+          // NOP
+          break;
+        case DATA_SYNC:
+          rc = (int)fDataSync.invokeExact(fd.fd());
+          break;
+        case FILE_SYNC:
+          rc = (int)fSync.invokeExact(fd.fd());
+          break;
+        default:
+          throw new RuntimeException("bad sync type");
+      }
+      checkError(rc == 0);
+      return new WriteResult(stabilityLevel, n);
+    } catch (Throwable t) {
+      Throwables.throwIfInstanceOf(t, IOException.class);
+      throw new RuntimeException(t);
+    }
   }
 
   @Override
@@ -1026,8 +1038,6 @@ public class LocalVFS implements VirtualFileSystem {
   public interface SysVfs {
 
     int ioctl(int fd, int request, @Out @In byte[] fh);
-
-    int pwrite(int fd, @In ByteBuffer buf, int nbyte, long offset);
 
     int flistxattr(int fd, @Out byte[] buf, int size);
 
