@@ -32,10 +32,6 @@ import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.NativeScope;
-import jnr.ffi.byref.LongLongByReference;
-import jnr.ffi.provider.FFIProvider;
-import jnr.constants.platform.Errno;
-import jnr.ffi.annotations.*;
 import org.dcache.nfs.status.*;
 
 import org.dcache.nfs.util.UnixSubjects;
@@ -88,9 +84,6 @@ public class LocalVFS implements VirtualFileSystem {
   private static final int AT_SYMLINK_NOFOLLOW = 0x100;
   private static final int AT_REMOVEDIR = 0x200;
   private static final int AT_EMPTY_PATH = 0x1000;
-
-  protected final SysVfs sysVfs;
-  private final jnr.ffi.Runtime runtime;
 
   private final KernelFileHandle rootFh;
   protected final int rootFd;
@@ -175,6 +168,12 @@ public class LocalVFS implements VirtualFileSystem {
   private static final MethodHandle fLinkat;
   private static final MethodHandle fPwrite;
   private static final MethodHandle fCopyFileRange;
+  private static final MethodHandle fListxattr;
+  private static final MethodHandle fGetxattr;
+  private static final MethodHandle fSetxattr;
+  private static final MethodHandle fRemovexattr;
+  private static final MethodHandle fMknodeAt;
+  private static final MethodHandle fIoctl;
 
   private static final MethodHandle fErrono;
 
@@ -338,12 +337,45 @@ public class LocalVFS implements VirtualFileSystem {
             MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class, MemoryAddress.class, long.class, int.class),
             FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_INT, C_POINTER, C_LONG_LONG, C_INT)
     );
+
+    fListxattr  = C_LINKER.downcallHandle(
+            LibraryLookup.ofDefault().lookup("flistxattr").get().address(),
+            MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class),
+            FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_INT)
+    );
+
+    fGetxattr  = C_LINKER.downcallHandle(
+            LibraryLookup.ofDefault().lookup("fgetxattr").get().address(),
+            MethodType.methodType(int.class, int.class, MemoryAddress.class, MemoryAddress.class, int.class),
+            FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_POINTER, C_INT)
+    );
+
+    fSetxattr  = C_LINKER.downcallHandle(
+            LibraryLookup.ofDefault().lookup("fsetxattr").get().address(),
+            MethodType.methodType(int.class, int.class, MemoryAddress.class, MemoryAddress.class, int.class, int.class),
+            FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_POINTER, C_INT, C_INT)
+    );
+
+    fRemovexattr  = C_LINKER.downcallHandle(
+            LibraryLookup.ofDefault().lookup("fremovexattr").get().address(),
+            MethodType.methodType(int.class, int.class, MemoryAddress.class),
+            FunctionDescriptor.of(C_INT, C_INT, C_POINTER)
+    );
+
+    fMknodeAt = C_LINKER.downcallHandle(
+            LibraryLookup.ofDefault().lookup("__xmknodat").get().address(),
+            MethodType.methodType(int.class, int.class, int.class, MemoryAddress.class, int.class, MemoryAddress.class),
+            FunctionDescriptor.of(C_INT, C_INT, C_INT, C_POINTER, C_INT, C_POINTER)
+    );
+
+    fIoctl  = C_LINKER.downcallHandle(
+            LibraryLookup.ofDefault().lookup("ioctl").get().address(),
+            MethodType.methodType(int.class, int.class, int.class, MemoryAddress.class),
+            FunctionDescriptor.of(C_INT, C_INT, C_INT, C_POINTER)
+    );
   }
 
   public LocalVFS(File root) throws IOException {
-
-    sysVfs = FFIProvider.getSystemProvider().createLibraryLoader(SysVfs.class).load("c");
-    runtime = jnr.ffi.Runtime.getRuntime(sysVfs);
 
     rootFd = open(root.getAbsolutePath(), O_DIRECTORY, O_RDONLY);
     checkError(rootFd >= 0);
@@ -374,7 +406,7 @@ public class LocalVFS implements VirtualFileSystem {
     }
 
     try (SystemFd fd = inode2fd(parent, O_NOFOLLOW | O_DIRECTORY);  var emptyString = CLinker.toCString("");
-         var pathRaw = CLinker.toCString(path)) {
+         var pathRaw = CLinker.toCString(path); var scope = NativeScope.unboundedScope()) {
 
       int rc;
       if (type == Stat.Type.REGULAR) {
@@ -391,8 +423,10 @@ public class LocalVFS implements VirtualFileSystem {
 
         // FIXME: we should get major and minor numbers from CREATE arguments.
         // dev == (long)major << 32 | minor
-        LongLongByReference dev = new LongLongByReference(type == Stat.Type.BLOCK || type == Stat.Type.CHAR ? 1 : 0);
-        rc = sysVfs.__xmknodat(0, fd.fd(), path,  mode | type.toMode(), dev);
+        var dev = scope.allocate(Long.BYTES);
+        dev.asByteBuffer().putLong(0, type == Stat.Type.BLOCK || type == Stat.Type.CHAR ? 1 : 0);
+
+        rc = (int)fMknodeAt.invokeExact(0, fd.fd(), pathRaw.address(),  mode | type.toMode(), dev);
         checkError(rc >= 0);
         rc = (int)fChownat.invokeExact(fd.fd(), pathRaw.address(), uid, gid, 0);
         checkError(rc >= 0);
@@ -812,34 +846,43 @@ public class LocalVFS implements VirtualFileSystem {
 
   @Override
   public String[] listXattrs(Inode inode) throws IOException {
-    byte[] out = new byte[1024];
-    List<String> list = new ArrayList<>();
-    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW)) {
 
-      int rc = sysVfs.flistxattr(fd.fd(), out, out.length);
+    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var scope = NativeScope.unboundedScope()) {
+
+      var out = scope.allocate(1024);
+      int rc = (int)fListxattr.invokeExact(fd.fd(), out.address(), (int)out.byteSize());
       checkError(rc >= 0);
 
+      byte[] listRaw = out.toByteArray();
+      List<String> list = new ArrayList<>();
       for (int i = 0; i < rc; ) {
-        int index = findByte(out, (byte) '\0', i);
+        int index = findByte(listRaw, (byte) '\0', i);
         if (index < 0) {
           break;
         }
-        list.add(new String(out, i, index - i, UTF_8));
+        list.add(new String(listRaw, i, index - i, UTF_8));
         i = index + 1;
       }
       return list.toArray(String[]::new);
+    } catch (Throwable t) {
+      Throwables.throwIfInstanceOf(t, IOException.class);
+      throw new RuntimeException(t);
     }
   }
 
   @Override
   public byte[] getXattr(Inode inode, String name) throws IOException {
-    byte[] out = new byte[64 * 1024];
 
-    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW)) {
+    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var scope = NativeScope.unboundedScope();
+         var attrName = CLinker.toCString(toXattrName(name))) {
 
-      int rc = sysVfs.fgetxattr(fd.fd(), toXattrName(name), out, out.length);
+      var out = scope.allocate(64*1024);
+      int rc = (int)fGetxattr.invokeExact(fd.fd(), attrName.address(), out.address(), (int)out.byteSize());
       checkError(rc >= 0);
-      return Arrays.copyOf(out, rc);
+      return out.asSlice(0, rc).toByteArray();
+    } catch (Throwable t) {
+      Throwables.throwIfInstanceOf(t, IOException.class);
+      throw new RuntimeException(t);
     }
   }
 
@@ -853,17 +896,27 @@ public class LocalVFS implements VirtualFileSystem {
       case REPLACE -> 2;
     };
 
-    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW)) {
-      int rc = sysVfs.fsetxattr(fd.fd(), toXattrName(attr), value, value.length, flag);
+    var data = ByteBuffer.allocateDirect(value.length);
+    data.put(value);
+
+    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var attrName = CLinker.toCString(toXattrName(attr));
+      var dataRaw = MemorySegment.ofByteBuffer(data)) {
+      int rc = (int)fSetxattr.invokeExact(fd.fd(), attrName.address(), dataRaw.address(), value.length, flag);
       checkError(rc == 0);
+    } catch (Throwable t) {
+      Throwables.throwIfInstanceOf(t, IOException.class);
+      throw new RuntimeException(t);
     }
   }
 
   @Override
   public void removeXattr(Inode inode, String attr) throws IOException {
-    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW)) {
-      int rc = sysVfs.fremovexattr(fd.fd(), toXattrName(attr));
+    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var attrName = CLinker.toCString(toXattrName(attr))) {
+      int rc = (int)fRemovexattr.invokeExact(fd.fd(), attrName.address());
       checkError(rc == 0);
+    } catch (Throwable t) {
+      Throwables.throwIfInstanceOf(t, IOException.class);
+      throw new RuntimeException(t);
     }
   }
 
@@ -1053,23 +1106,17 @@ public class LocalVFS implements VirtualFileSystem {
     }
   }
 
-  @SuppressWarnings("PublicInnerClass")
-  public interface SysVfs {
-
-    int ioctl(int fd, int request, @Out @In byte[] fh);
-
-    int flistxattr(int fd, @Out byte[] buf, int size);
-
-    int fgetxattr(int fd, CharSequence name, @Out byte[] buf, int size);
-
-    int fsetxattr(int fd, CharSequence name, @In byte[] buf, int size, int flags);
-
-    int fremovexattr(int fd, CharSequence name);
-
-    int __xmknodat(int version, int fd, CharSequence name, int mode, @In @Out LongLongByReference dev);
-
+  int ioctl(int fd, int request, byte[] data) throws IOException{
+    ByteBuffer bb = ByteBuffer.allocateDirect(data.length);
+    bb.put(data);
+    bb.flip();
+    try (var dataRaw = MemorySegment.ofByteBuffer(bb)) {
+      return (int)fIoctl.invokeExact(fd, request, dataRaw.address());
+    }  catch (Throwable t) {
+      Throwables.throwIfInstanceOf(t, IOException.class);
+      throw new RuntimeException(t);
+    }
   }
-
 
   // FFI helpers
   private String strerror(int errno) {
