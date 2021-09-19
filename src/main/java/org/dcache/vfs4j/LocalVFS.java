@@ -531,7 +531,7 @@ public class LocalVFS implements VirtualFileSystem {
         int reclen = bb.getShort();
         byte type = bb.get();
 
-        String name = CLinker.toJavaString(rawDirent.asSlice(8+8+2+1).address());
+        String name = CLinker.toJavaString(rawDirent.asSlice(8+8+2+1));
 
         Inode fInode = path2fh(fd.fd(), name, 0).toInode();
         Stat stat = getattr(fInode);
@@ -646,7 +646,7 @@ public class LocalVFS implements VirtualFileSystem {
       int rc = (int)fReadlinkat.invokeExact(fd.fd(), emptyString.address(), link.address(), (int)stat.getSize());
       checkError(rc >= 0);
 
-      return CLinker.toJavaString(link.address());
+      return CLinker.toJavaString(link);
 
     } catch (Throwable t) {
       Throwables.throwIfInstanceOf(t, IOException.class);
@@ -1158,7 +1158,7 @@ public class LocalVFS implements VirtualFileSystem {
   private String strerror(int errno) {
     try {
       MemoryAddress o = (MemoryAddress) fStrerror.invokeExact(errno);
-    return CLinker.toJavaString(o);
+      return CLinker.toJavaString(o);
     } catch (Throwable t) {
       throw new RuntimeException(t);
     }
