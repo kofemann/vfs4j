@@ -60,12 +60,7 @@ public class LocalVFS implements VirtualFileSystem {
   private final static int MAX_CACHE = 1024*1024;
 
   // directIO ByteByffer cache
-  private static final ThreadLocal<ByteBuffer> BUFFERS = new ThreadLocal<ByteBuffer>() {
-    @Override
-    protected ByteBuffer initialValue() {
-      return  ByteBuffer.allocateDirect(MAX_CACHE);
-    }
-  };
+  private static final ThreadLocal<ByteBuffer> BUFFERS = ThreadLocal.withInitial(() -> ByteBuffer.allocateDirect(MAX_CACHE));
 
   private static final String XATTR_PREFIX = "user.";
 
