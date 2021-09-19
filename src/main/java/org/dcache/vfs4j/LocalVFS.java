@@ -184,193 +184,193 @@ public class LocalVFS implements VirtualFileSystem {
 
     // magic function that return pointer to errno variable
     fErrono = C_LINKER.downcallHandle(
-                    LOOKUP.lookup("__errno_location").get().address(),
+                    LOOKUP.lookup("__errno_location").get(),
                     MethodType.methodType(MemoryAddress.class),
                     FunctionDescriptor.of(C_POINTER)
             );
 
     fStrerror = C_LINKER.downcallHandle(
-                    LOOKUP.lookup("strerror").get().address(),
+                    LOOKUP.lookup("strerror").get(),
                     MethodType.methodType(MemoryAddress.class, int.class),
                     FunctionDescriptor.of(C_POINTER, C_INT)
             );
 
     fOpen = C_LINKER.downcallHandle(
-                    LOOKUP.lookup("open").get().address(),
+                    LOOKUP.lookup("open").get(),
                     MethodType.methodType(int.class, MemoryAddress.class, int.class, int.class),
                     FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_INT)
             );
 
     fOpenAt = C_LINKER.downcallHandle(
-                    LOOKUP.lookup("openat").get().address(),
+                    LOOKUP.lookup("openat").get(),
                     MethodType.methodType(int.class, int.class,  MemoryAddress.class, int.class, int.class),
                     FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_INT, C_INT)
             );
 
     fClose = C_LINKER.downcallHandle(
-                    LOOKUP.lookup("close").get().address(),
+                    LOOKUP.lookup("close").get(),
                     MethodType.methodType(int.class, int.class),
                     FunctionDescriptor.of(C_INT, C_INT)
             );
 
     fNameToHandleAt = C_LINKER.downcallHandle(
-                    LOOKUP.lookup("name_to_handle_at").get().address(),
+                    LOOKUP.lookup("name_to_handle_at").get(),
                     MethodType.methodType(int.class, int.class, MemoryAddress.class, MemoryAddress.class, MemoryAddress.class, int.class),
                     FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_POINTER, C_POINTER, C_INT)
             );
 
     fOpenByHandleAt = C_LINKER.downcallHandle(
-                    LOOKUP.lookup("open_by_handle_at").get().address(),
+                    LOOKUP.lookup("open_by_handle_at").get(),
                     MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class),
                     FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_INT)
             );
 
     fDataSync = C_LINKER.downcallHandle(
-                    LOOKUP.lookup("fdatasync").get().address(),
+                    LOOKUP.lookup("fdatasync").get(),
                     MethodType.methodType(int.class, int.class),
                     FunctionDescriptor.of(C_INT, C_INT)
             );
 
     fSync = C_LINKER.downcallHandle(
-                    LOOKUP.lookup("fsync").get().address(),
+                    LOOKUP.lookup("fsync").get(),
                     MethodType.methodType(int.class, int.class),
                     FunctionDescriptor.of(C_INT, C_INT)
             );
 
     fStatat = C_LINKER.downcallHandle(
-                    LOOKUP.lookup("fstatat").get().address(),
+                    LOOKUP.lookup("fstatat").get(),
                     MethodType.methodType(int.class, int.class, MemoryAddress.class, MemoryAddress.class, int.class),
                     FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_POINTER, C_INT)
             );
 
     fStatFs = C_LINKER.downcallHandle(
-                    LOOKUP.lookup("fstatfs").get().address(),
+                    LOOKUP.lookup("fstatfs").get(),
                     MethodType.methodType(int.class, int.class, MemoryAddress.class),
                     FunctionDescriptor.of(C_INT, C_INT, C_POINTER)
             );
 
     fUnlinkAt = C_LINKER.downcallHandle(
-                    LOOKUP.lookup("unlinkat").get().address(),
+                    LOOKUP.lookup("unlinkat").get(),
                     MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class),
                     FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_INT)
             );
 
     fOpendir = C_LINKER.downcallHandle(
-                    LOOKUP.lookup("fdopendir").get().address(),
+                    LOOKUP.lookup("fdopendir").get(),
                     MethodType.methodType(MemoryAddress.class, int.class),
                     FunctionDescriptor.of(C_POINTER, C_INT)
             );
 
     fReaddir = C_LINKER.downcallHandle(
-                    LOOKUP.lookup("readdir").get().address(),
+                    LOOKUP.lookup("readdir").get(),
                     MethodType.methodType(MemoryAddress.class, MemoryAddress.class),
                     FunctionDescriptor.of(C_POINTER, C_POINTER)
             );
 
     fSeekdir = C_LINKER.downcallHandle(
-                    LOOKUP.lookup("seekdir").get().address(),
+                    LOOKUP.lookup("seekdir").get(),
                     MethodType.methodType(void.class, MemoryAddress.class, long.class),
                     FunctionDescriptor.ofVoid(C_POINTER, CLinker.C_LONG)
             );
 
     fPread = C_LINKER.downcallHandle(
-                    LOOKUP.lookup("pread").get().address(),
+                    LOOKUP.lookup("pread").get(),
                     MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class, long.class),
                     FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_INT, CLinker.C_LONG)
             );
 
     fPwrite = C_LINKER.downcallHandle(
-            LOOKUP.lookup("pwrite").get().address(),
+            LOOKUP.lookup("pwrite").get(),
             MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class, long.class),
             FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_INT, C_LONG_LONG)
     );
 
     fSymlinkat = C_LINKER.downcallHandle(
-                    LOOKUP.lookup("symlinkat").get().address(),
+                    LOOKUP.lookup("symlinkat").get(),
                     MethodType.methodType(int.class, MemoryAddress.class, int.class, MemoryAddress.class),
                     FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_POINTER)
             );
 
     fRenameat = C_LINKER.downcallHandle(
-                    LOOKUP.lookup("renameat").get().address(),
+                    LOOKUP.lookup("renameat").get(),
                     MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class, MemoryAddress.class),
                     FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_INT, C_POINTER)
             );
 
     fReadlinkat = C_LINKER.downcallHandle(
-            LOOKUP.lookup("readlinkat").get().address(),
+            LOOKUP.lookup("readlinkat").get(),
             MethodType.methodType(int.class, int.class, MemoryAddress.class, MemoryAddress.class, int.class),
             FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_POINTER, C_INT)
     );
 
     fChownat = C_LINKER.downcallHandle(
-            LOOKUP.lookup("fchownat").get().address(),
+            LOOKUP.lookup("fchownat").get(),
             MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class, int.class, int.class),
             FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_INT, C_INT, C_INT)
     );
 
     fMkdirat = C_LINKER.downcallHandle(
-            LOOKUP.lookup("mkdirat").get().address(),
+            LOOKUP.lookup("mkdirat").get(),
             MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class),
             FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_INT)
     );
 
     fChmod = C_LINKER.downcallHandle(
-            LOOKUP.lookup("fchmod").get().address(),
+            LOOKUP.lookup("fchmod").get(),
             MethodType.methodType(int.class, int.class, int.class),
             FunctionDescriptor.of(C_INT, C_INT, C_INT)
     );
 
     fFtruncate = C_LINKER.downcallHandle(
-            LOOKUP.lookup("ftruncate").get().address(),
+            LOOKUP.lookup("ftruncate").get(),
             MethodType.methodType(int.class, int.class, long.class),
             FunctionDescriptor.of(C_INT, C_INT, C_LONG_LONG)
     );
 
     fLinkat = C_LINKER.downcallHandle(
-            LOOKUP.lookup("linkat").get().address(),
+            LOOKUP.lookup("linkat").get(),
             MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class, MemoryAddress.class, int.class),
             FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_INT, C_POINTER, C_INT)
     );
 
     fCopyFileRange = C_LINKER.downcallHandle(
-            LOOKUP.lookup("copy_file_range").get().address(),
+            LOOKUP.lookup("copy_file_range").get(),
             MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class, MemoryAddress.class, long.class, int.class),
             FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_INT, C_POINTER, C_LONG_LONG, C_INT)
     );
 
     fListxattr  = C_LINKER.downcallHandle(
-            LOOKUP.lookup("flistxattr").get().address(),
+            LOOKUP.lookup("flistxattr").get(),
             MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class),
             FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_INT)
     );
 
     fGetxattr  = C_LINKER.downcallHandle(
-            LOOKUP.lookup("fgetxattr").get().address(),
+            LOOKUP.lookup("fgetxattr").get(),
             MethodType.methodType(int.class, int.class, MemoryAddress.class, MemoryAddress.class, int.class),
             FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_POINTER, C_INT)
     );
 
     fSetxattr  = C_LINKER.downcallHandle(
-            LOOKUP.lookup("fsetxattr").get().address(),
+            LOOKUP.lookup("fsetxattr").get(),
             MethodType.methodType(int.class, int.class, MemoryAddress.class, MemoryAddress.class, int.class, int.class),
             FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_POINTER, C_INT, C_INT)
     );
 
     fRemovexattr  = C_LINKER.downcallHandle(
-            LOOKUP.lookup("fremovexattr").get().address(),
+            LOOKUP.lookup("fremovexattr").get(),
             MethodType.methodType(int.class, int.class, MemoryAddress.class),
             FunctionDescriptor.of(C_INT, C_INT, C_POINTER)
     );
 
     fMknodeAt = C_LINKER.downcallHandle(
-            LOOKUP.lookup("__xmknodat").get().address(),
+            LOOKUP.lookup("__xmknodat").get(),
             MethodType.methodType(int.class, int.class, int.class, MemoryAddress.class, int.class, MemoryAddress.class),
             FunctionDescriptor.of(C_INT, C_INT, C_INT, C_POINTER, C_INT, C_POINTER)
     );
 
     fIoctl  = C_LINKER.downcallHandle(
-            LOOKUP.lookup("ioctl").get().address(),
+            LOOKUP.lookup("ioctl").get(),
             MethodType.methodType(int.class, int.class, int.class, MemoryAddress.class),
             FunctionDescriptor.of(C_INT, C_INT, C_INT, C_POINTER)
     );
