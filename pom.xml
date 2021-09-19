@@ -9,7 +9,7 @@
     <url>https://github.com/kofemann/vfs4j</url>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <java.version>16</java.version>
+        <java.version>17</java.version>
     </properties>
 
     <build>
