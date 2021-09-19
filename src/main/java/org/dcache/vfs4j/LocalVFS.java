@@ -146,21 +146,21 @@ public class LocalVFS implements VirtualFileSystem {
   private static final MethodHandle fOpenByHandleAt;
   private static final MethodHandle fSync;
   private static final MethodHandle fDataSync;
-  private static final MethodHandle fStatat;
+  private static final MethodHandle fStatAt;
   private static final MethodHandle fStatFs;
   private static final MethodHandle fUnlinkAt;
   private static final MethodHandle fOpendir;
   private static final MethodHandle fReaddir;
   private static final MethodHandle fSeekdir;
   private static final MethodHandle fPread;
-  private static final MethodHandle fSymlinkat;
-  private static final MethodHandle fRenameat;
-  private static final MethodHandle fReadlinkat;
-  private static final MethodHandle fChownat;
-  private static final MethodHandle fMkdirat;
+  private static final MethodHandle fSymlinkAt;
+  private static final MethodHandle fRenameAt;
+  private static final MethodHandle fReadlinkAt;
+  private static final MethodHandle fChownAt;
+  private static final MethodHandle fMkdirAt;
   private static final MethodHandle fChmod;
   private static final MethodHandle fFtruncate;
-  private static final MethodHandle fLinkat;
+  private static final MethodHandle fLinkAt;
   private static final MethodHandle fPwrite;
   private static final MethodHandle fCopyFileRange;
   private static final MethodHandle fListxattr;
@@ -232,7 +232,7 @@ public class LocalVFS implements VirtualFileSystem {
                     FunctionDescriptor.of(C_INT, C_INT)
             );
 
-    fStatat = C_LINKER.downcallHandle(
+    fStatAt = C_LINKER.downcallHandle(
                     LOOKUP.lookup("fstatat").get(),
                     MethodType.methodType(int.class, int.class, MemoryAddress.class, MemoryAddress.class, int.class),
                     FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_POINTER, C_INT)
@@ -280,31 +280,31 @@ public class LocalVFS implements VirtualFileSystem {
             FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_INT, C_LONG_LONG)
     );
 
-    fSymlinkat = C_LINKER.downcallHandle(
+    fSymlinkAt = C_LINKER.downcallHandle(
                     LOOKUP.lookup("symlinkat").get(),
                     MethodType.methodType(int.class, MemoryAddress.class, int.class, MemoryAddress.class),
                     FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_POINTER)
             );
 
-    fRenameat = C_LINKER.downcallHandle(
+    fRenameAt = C_LINKER.downcallHandle(
                     LOOKUP.lookup("renameat").get(),
                     MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class, MemoryAddress.class),
                     FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_INT, C_POINTER)
             );
 
-    fReadlinkat = C_LINKER.downcallHandle(
+    fReadlinkAt = C_LINKER.downcallHandle(
             LOOKUP.lookup("readlinkat").get(),
             MethodType.methodType(int.class, int.class, MemoryAddress.class, MemoryAddress.class, int.class),
             FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_POINTER, C_INT)
     );
 
-    fChownat = C_LINKER.downcallHandle(
+    fChownAt = C_LINKER.downcallHandle(
             LOOKUP.lookup("fchownat").get(),
             MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class, int.class, int.class),
             FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_INT, C_INT, C_INT)
     );
 
-    fMkdirat = C_LINKER.downcallHandle(
+    fMkdirAt = C_LINKER.downcallHandle(
             LOOKUP.lookup("mkdirat").get(),
             MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class),
             FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_INT)
@@ -322,7 +322,7 @@ public class LocalVFS implements VirtualFileSystem {
             FunctionDescriptor.of(C_INT, C_INT, C_LONG_LONG)
     );
 
-    fLinkat = C_LINKER.downcallHandle(
+    fLinkAt = C_LINKER.downcallHandle(
             LOOKUP.lookup("linkat").get(),
             MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class, MemoryAddress.class, int.class),
             FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_INT, C_POINTER, C_INT)
@@ -410,7 +410,7 @@ public class LocalVFS implements VirtualFileSystem {
       if (type == Stat.Type.REGULAR) {
         int rfd =  (int)fOpenAt.invokeExact(fd.fd(), pathRaw.address(), O_EXCL | O_CREAT | O_RDWR, mode);
         checkError(rfd >= 0);
-        rc = (int)fChownat.invokeExact(rfd, emptyString.address(), uid, gid, AT_EMPTY_PATH);
+        rc = (int) fChownAt.invokeExact(rfd, emptyString.address(), uid, gid, AT_EMPTY_PATH);
         checkError(rc == 0);
 
         Inode inode = path2fh(rfd, "", AT_EMPTY_PATH).toInode();
@@ -426,7 +426,7 @@ public class LocalVFS implements VirtualFileSystem {
 
         rc = (int)fMknodeAt.invokeExact(0, fd.fd(), pathRaw.address(),  mode | type.toMode(), dev);
         checkError(rc >= 0);
-        rc = (int)fChownat.invokeExact(fd.fd(), pathRaw.address(), uid, gid, 0);
+        rc = (int) fChownAt.invokeExact(fd.fd(), pathRaw.address(), uid, gid, 0);
         checkError(rc >= 0);
         return path2fh(fd.fd(), path, 0).toInode();
       }
@@ -491,7 +491,7 @@ public class LocalVFS implements VirtualFileSystem {
       var emptyString = CLinker.toCString("", scope);
       var pathRaw = CLinker.toCString(path, scope);
 
-      int rc = (int)fLinkat.invokeExact(inodeFd.fd(), emptyString.address(), dirFd.fd(), pathRaw.address(), AT_EMPTY_PATH);
+      int rc = (int) fLinkAt.invokeExact(inodeFd.fd(), emptyString.address(), dirFd.fd(), pathRaw.address(), AT_EMPTY_PATH);
 
       checkError(rc == 0);
       return lookup(parent, path);
@@ -555,11 +555,11 @@ public class LocalVFS implements VirtualFileSystem {
       var pathRaw = CLinker.toCString(path, scope);
       var emptyString = CLinker.toCString("", scope);
 
-      int rc = (int)fMkdirat.invokeExact(fd.fd(), pathRaw.address(), mode);
+      int rc = (int) fMkdirAt.invokeExact(fd.fd(), pathRaw.address(), mode);
       checkError(rc == 0);
       inode = lookup(parent, path);
       try (SystemFd fd1 = inode2fd(inode, O_NOFOLLOW | O_DIRECTORY)) {
-        rc = (int)fChownat.invokeExact(fd1.fd(), emptyString.address(), uid, gid, AT_EMPTY_PATH);
+        rc = (int) fChownAt.invokeExact(fd1.fd(), emptyString.address(), uid, gid, AT_EMPTY_PATH);
         checkError(rc == 0);
         return inode;
       }
@@ -578,7 +578,7 @@ public class LocalVFS implements VirtualFileSystem {
       MemorySegment newNameRaw = CLinker.toCString(newName, scope);
       MemorySegment oldNameRaw = CLinker.toCString(oldName, scope);
 
-        int rc = (int)fRenameat.invokeExact(fd1.fd(), oldNameRaw.address(), fd2.fd(), newNameRaw.address());
+        int rc = (int) fRenameAt.invokeExact(fd1.fd(), oldNameRaw.address(), fd2.fd(), newNameRaw.address());
         checkError(rc == 0);
         return true;
       } catch (Throwable t) {
@@ -638,7 +638,7 @@ public class LocalVFS implements VirtualFileSystem {
       Stat stat = statByFd(fd);
       var link = MemorySegment.allocateNative(stat.getSize(), scope);
 
-      int rc = (int)fReadlinkat.invokeExact(fd.fd(), emptyString.address(), link.address(), (int)stat.getSize());
+      int rc = (int) fReadlinkAt.invokeExact(fd.fd(), emptyString.address(), link.address(), (int)stat.getSize());
       checkError(rc >= 0);
 
       return CLinker.toJavaString(link);
@@ -677,14 +677,14 @@ public class LocalVFS implements VirtualFileSystem {
       var pathRaw = CLinker.toCString(path, scope);
       var emptyString = CLinker.toCString("", scope);
 
-      int rc = (int)fSymlinkat.invokeExact(linkRaw.address(), fd.fd(), pathRaw.address());
+      int rc = (int) fSymlinkAt.invokeExact(linkRaw.address(), fd.fd(), pathRaw.address());
       checkError(rc == 0);
       Inode inode = lookup(parent, path);
       Stat stat = new Stat();
       stat.setUid(uid);
       stat.setGid(gid);
       try (SystemFd fd1 = inode2fd(inode, O_PATH)) {
-        rc = (int)fChownat.invokeExact(fd1.fd(), emptyString.address(), uid, gid, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW);
+        rc = (int) fChownAt.invokeExact(fd1.fd(), emptyString.address(), uid, gid, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW);
         checkError(rc == 0);
       }
       return inode;
@@ -789,7 +789,7 @@ public class LocalVFS implements VirtualFileSystem {
       }
 
       if (uid != -1 || gid != -1) {
-        rc = (int)fChownat.invokeExact(fd.fd(), emptyString.address(), uid, gid, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW);
+        rc = (int) fChownAt.invokeExact(fd.fd(), emptyString.address(), uid, gid, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW);
         checkError(rc == 0);
       }
 
@@ -1071,7 +1071,7 @@ public class LocalVFS implements VirtualFileSystem {
       MemorySegment rawStat = MemorySegment.allocateNative(STAT_LAYOUT, scope);
       MemorySegment emptyString = CLinker.toCString("", scope);
 
-      int rc = (int)fStatat.invokeExact(fd.fd(), emptyString.address(), rawStat.address(), AT_EMPTY_PATH);
+      int rc = (int) fStatAt.invokeExact(fd.fd(), emptyString.address(), rawStat.address(), AT_EMPTY_PATH);
 
       checkError(rc == 0);
       return toVfsStat(rawStat);
