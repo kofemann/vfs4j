@@ -59,6 +59,9 @@ public class LocalVFS implements VirtualFileSystem {
   // max buffer size to cache
   private final static int MAX_CACHE = 1024*1024;
 
+  // max file name
+  private final static int MAX_NAME_LEN = 256;
+
   // directIO ByteByffer cache
   private static final ThreadLocal<ByteBuffer> BUFFERS = ThreadLocal.withInitial(() -> ByteBuffer.allocateDirect(MAX_CACHE));
 
@@ -134,7 +137,7 @@ public class LocalVFS implements VirtualFileSystem {
           MemoryLayout.valueLayout(Long.SIZE, ByteOrder.nativeOrder()).withName("off"),
           MemoryLayout.valueLayout(Short.SIZE, ByteOrder.nativeOrder()).withName("reclen"),
           MemoryLayout.valueLayout(Byte.SIZE, ByteOrder.nativeOrder()).withName("type"),
-          MemoryLayout.sequenceLayout(256, MemoryLayout.valueLayout(Byte.SIZE, ByteOrder.nativeOrder())).withName("name")
+          MemoryLayout.sequenceLayout(MAX_NAME_LEN, MemoryLayout.valueLayout(Byte.SIZE, ByteOrder.nativeOrder())).withName("name")
   );
 
   // handles to native functions;
