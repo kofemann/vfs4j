@@ -529,7 +529,7 @@ public class LocalVFS implements VirtualFileSystem {
         int reclen = bb.getShort();
         byte type = bb.get();
 
-        String name = CLinker.toJavaString(rawDirent.asSlice(8+8+2+1));
+        String name = CLinker.toJavaString(rawDirent.asSlice(8+8+2+1, reclen));
 
         Inode fInode = path2fh(fd.fd(), name, 0).toInode();
         Stat stat = getattr(fInode);
@@ -638,13 +638,12 @@ public class LocalVFS implements VirtualFileSystem {
         var scope = ResourceScope.newConfinedScope()) {
 
       MemorySegment emptyString = CLinker.toCString("", scope);
-      Stat stat = statByFd(fd);
-      var link = MemorySegment.allocateNative(stat.getSize(), scope);
+      var link = MemorySegment.allocateNative(MAX_NAME_LEN, scope); // max path name length
 
-      int rc = (int) fReadlinkAt.invokeExact(fd.fd(), emptyString.address(), link.address(), (int)stat.getSize());
+      int rc = (int) fReadlinkAt.invokeExact(fd.fd(), emptyString.address(), link.address(), (int)link.byteSize());
       checkError(rc >= 0);
 
-      return CLinker.toJavaString(link);
+      return CLinker.toJavaString(link.asSlice(0, rc));
 
     } catch (Throwable t) {
       Throwables.throwIfInstanceOf(t, IOException.class);
