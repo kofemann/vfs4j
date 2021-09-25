@@ -18,7 +18,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.8.0</version>
+                <version>3.8.1</version>
                 <configuration>
                     <showDeprecation>true</showDeprecation>
                     <encoding>UTF-8</encoding>
@@ -26,6 +26,7 @@
                      <!-- without forking compilation happens in the
                          same process, so no arguments are applied -->
                     <fork>true</fork>
+                    <executable>/usr/lib/jvm/java-17/bin/javac</executable>
                     <compilerArgs>
                         <arg>--add-modules</arg>
                         <arg>jdk.incubator.foreign</arg>
