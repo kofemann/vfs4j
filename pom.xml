@@ -10,6 +10,7 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <java.version>17</java.version>
+        <main.class>org.dcache.vfs4j.NfsMain</main.class>
     </properties>
 
     <build>
@@ -46,7 +47,7 @@
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <manifestEntries>
-                                        <Main-Class>org.dcache.vfs4j.NfsMain</Main-Class>
+                                        <Main-Class>${main.class}</Main-Class>
                                         <version>${project.version}</version>
                                         <url>${project.url}</url>
                                         <Build-Time>${maven.build.timestamp}</Build-Time>
