@@ -998,12 +998,16 @@ public class LocalVFS implements VirtualFileSystem {
       MemorySegment bytes = MemorySegment.allocateNative(KernelFileHandle.MAX_HANDLE_SZ, scope);
       MemorySegment mntId = MemorySegment.allocateNative(Integer.BYTES, scope);
 
-      bytes.asByteBuffer().order(ByteOrder.nativeOrder()).putInt(0, (int)bytes.byteSize());
+      ByteBuffer asByteBuffer = bytes.asByteBuffer().order(ByteOrder.nativeOrder());
+      asByteBuffer.putInt(0, (int)bytes.byteSize());
 
       int rc = (int)fNameToHandleAt.invokeExact(fd, str.address(), bytes.address(), mntId.address(), flags);
       checkError(rc == 0);
 
-      KernelFileHandle fh = new KernelFileHandle(bytes.toByteArray());
+      int handleSize = asByteBuffer.getInt(0) + 8;
+      byte[] handle = bytes.asSlice(0, handleSize).toByteArray();
+
+      KernelFileHandle fh = new KernelFileHandle(handle);
       LOG.debug("path = [{}], handle = {}", path, fh);
       return fh;
     } catch (Throwable t) {
