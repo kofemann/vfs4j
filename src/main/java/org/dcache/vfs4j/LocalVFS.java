@@ -1046,6 +1046,7 @@ public class LocalVFS implements VirtualFileSystem {
       case ENOTSUP -> throw new NotSuppException(msg);
       case ENXIO -> throw new NXioException(msg);
       case ENODATA -> throw new NoXattrException(msg);
+      case ENOSPC -> throw new NoSpcException(msg);
       default -> {
         IOException t = new ServerFaultException(msg);
         LOG.error("unhandled exception ", t);
