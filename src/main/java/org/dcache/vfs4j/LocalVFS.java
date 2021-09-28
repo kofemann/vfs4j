@@ -91,6 +91,10 @@ public class LocalVFS implements VirtualFileSystem {
   /** Cache of opened files used by read/write operations. */
   private final LoadingCache<Inode, SystemFd> _openFilesCache;
 
+  /** Cache of directories for fast lookup. */
+  private final LoadingCache<Inode, SystemFd> _openDirCache;
+
+
   // struct stat layout
   public static final GroupLayout STAT_LAYOUT = MemoryLayout.structLayout(
 
@@ -386,6 +390,12 @@ public class LocalVFS implements VirtualFileSystem {
             .maximumSize(1024)
             .removalListener(new FileCloser())
             .build(new FileOpenner());
+
+    _openDirCache =
+            CacheBuilder.newBuilder()
+                    .maximumSize(1024)
+                    .removalListener(new FileCloser())
+                    .build(new DirOpenner());
   }
 
   @Override
@@ -404,7 +414,9 @@ public class LocalVFS implements VirtualFileSystem {
       throw new NotSuppException("create of this type not supported");
     }
 
-    try (SystemFd fd = inode2fd(parent, O_NOFOLLOW | O_DIRECTORY); var scope = ResourceScope.newConfinedScope()) {
+    try (var scope = ResourceScope.newConfinedScope()) {
+
+      SystemFd fd = _openDirCache.get(parent);
 
       var emptyString = CLinker.toCString("", scope);
       var pathRaw = CLinker.toCString(path, scope);
@@ -431,7 +443,7 @@ public class LocalVFS implements VirtualFileSystem {
         checkError(rc >= 0);
         rc = (int) fChownAt.invokeExact(fd.fd(), pathRaw.address(), uid, gid, 0);
         checkError(rc >= 0);
-        return path2fh(fd.fd(), path, 0).toInode();
+        return lookup0(fd.fd(), path);
       }
     } catch (Throwable t) {
       Throwables.throwIfInstanceOf(t, IOException.class);
@@ -481,9 +493,23 @@ public class LocalVFS implements VirtualFileSystem {
 
   @Override
   public Inode lookup(Inode parent, String path) throws IOException {
-    try (SystemFd fd = inode2fd(parent, O_PATH | O_NOACCESS )) {
-      return path2fh(fd.fd(), path, 0).toInode();
+    try {
+      SystemFd fd = _openDirCache.get(parent);
+      return lookup0(fd.fd(), path);
+    } catch (ExecutionException e) {
+      throw new IOException(e.getCause());
     }
+  }
+
+  /**
+   * lookup in parent directory.
+   * @param parent parent directory file descriptor.
+   * @param path path to lookup
+   * @return file's inode
+   * @throws IOException
+   */
+  private Inode lookup0(int parent, String path) throws IOException {
+      return path2fh(parent, path, 0).toInode();
   }
 
   @Override
@@ -497,7 +523,7 @@ public class LocalVFS implements VirtualFileSystem {
       int rc = (int) fLinkAt.invokeExact(inodeFd.fd(), emptyString.address(), dirFd.fd(), pathRaw.address(), AT_EMPTY_PATH);
 
       checkError(rc == 0);
-      return lookup(parent, path);
+      return lookup0(dirFd.fd(), path);
     }  catch (Throwable t) {
       Throwables.throwIfInstanceOf(t, IOException.class);
       throw new RuntimeException(t);
@@ -508,8 +534,9 @@ public class LocalVFS implements VirtualFileSystem {
   public DirectoryStream list(Inode inode, byte[] verifier, long cookie) throws IOException {
 
     TreeSet<DirectoryEntry> list = new TreeSet<>();
-    try (SystemFd fd = inode2fd(inode, O_DIRECTORY); var scope = ResourceScope.newConfinedScope()) {
+    try (var scope = ResourceScope.newConfinedScope()) {
 
+      SystemFd fd = _openDirCache.get(inode);
       MemoryAddress p = (MemoryAddress) fOpendir.invokeExact(fd.fd());
       checkError(p != MemoryAddress.NULL);
 
@@ -531,7 +558,7 @@ public class LocalVFS implements VirtualFileSystem {
 
         String name = CLinker.toJavaString(rawDirent.asSlice(8+8+2+1, reclen));
 
-        Inode fInode = path2fh(fd.fd(), name, 0).toInode();
+        Inode fInode = lookup0(fd.fd(), name);
         Stat stat = getattr(fInode);
         list.add(new DirectoryEntry(name, fInode, stat, off));
       }
@@ -553,14 +580,15 @@ public class LocalVFS implements VirtualFileSystem {
     int gid = (int) UnixSubjects.getPrimaryGid(subject);
 
     Inode inode;
-    try (SystemFd fd = inode2fd(parent, O_PATH | O_NOFOLLOW | O_DIRECTORY); var scope = ResourceScope.newConfinedScope()) {
+    try (var scope = ResourceScope.newConfinedScope()) {
 
+      SystemFd fd = _openDirCache.get(parent);
       var pathRaw = CLinker.toCString(path, scope);
       var emptyString = CLinker.toCString("", scope);
 
       int rc = (int) fMkdirAt.invokeExact(fd.fd(), pathRaw.address(), mode);
       checkError(rc == 0);
-      inode = lookup(parent, path);
+      inode = lookup0(fd.fd(), path);
       try (SystemFd fd1 = inode2fd(inode, O_NOFOLLOW | O_DIRECTORY)) {
         rc = (int) fChownAt.invokeExact(fd1.fd(), emptyString.address(), uid, gid, AT_EMPTY_PATH);
         checkError(rc == 0);
@@ -653,10 +681,11 @@ public class LocalVFS implements VirtualFileSystem {
 
   @Override
   public void remove(Inode parent, String path) throws IOException {
-    try (SystemFd fd = inode2fd(parent, O_PATH | O_DIRECTORY); var scope = ResourceScope.newConfinedScope()) {
+    try (var scope = ResourceScope.newConfinedScope()) {
 
+      SystemFd fd = _openDirCache.get(parent);
       MemorySegment pathRaw = CLinker.toCString(path, scope);
-      Inode inode = lookup(parent, path);
+      Inode inode = lookup0(fd.fd(), path);
       Stat stat = getattr(inode);
       int flags = stat.type() == Stat.Type.DIRECTORY ? AT_REMOVEDIR : 0;
       int rc = (int)fUnlinkAt.invokeExact(fd.fd(), pathRaw.address(), flags);
@@ -673,15 +702,16 @@ public class LocalVFS implements VirtualFileSystem {
     int uid = (int) UnixSubjects.getUid(subject);
     int gid = (int) UnixSubjects.getPrimaryGid(subject);
 
-    try (SystemFd fd = inode2fd(parent, O_DIRECTORY); var scope = ResourceScope.newConfinedScope()) {
+    try (var scope = ResourceScope.newConfinedScope()) {
 
+      SystemFd fd = _openDirCache.get(parent);
       var linkRaw = CLinker.toCString(link, scope);
       var pathRaw = CLinker.toCString(path, scope);
       var emptyString = CLinker.toCString("", scope);
 
       int rc = (int) fSymlinkAt.invokeExact(linkRaw.address(), fd.fd(), pathRaw.address());
       checkError(rc == 0);
-      Inode inode = lookup(parent, path);
+      Inode inode = lookup0(fd.fd(), path);
       Stat stat = new Stat();
       stat.setUid(uid);
       stat.setGid(gid);
@@ -1130,6 +1160,14 @@ public class LocalVFS implements VirtualFileSystem {
     @Override
     public SystemFd load(@Nonnull Inode key) throws Exception {
       return inode2fd(key, O_NOFOLLOW | O_RDWR);
+    }
+  }
+
+  private class DirOpenner extends CacheLoader<Inode, SystemFd> {
+
+    @Override
+    public SystemFd load(@Nonnull Inode key) throws Exception {
+      return inode2fd(key, O_NOFOLLOW | O_DIRECTORY);
     }
   }
 
