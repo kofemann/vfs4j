@@ -241,9 +241,9 @@ public class LocalVFS implements VirtualFileSystem {
             );
 
     fStatAt = C_LINKER.downcallHandle(
-                    LOOKUP.lookup("fstatat").orElseThrow(() -> new NoSuchElementException("fstatat")),
-                    MethodType.methodType(int.class, int.class, MemoryAddress.class, MemoryAddress.class, int.class),
-                    FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_POINTER, C_INT)
+                    LOOKUP.lookup("__fxstat64").orElseThrow(() -> new NoSuchElementException("fstatat")),
+                    MethodType.methodType(int.class, int.class, int.class, MemoryAddress.class),
+                    FunctionDescriptor.of(C_INT, C_INT, C_INT, C_POINTER)
             );
 
     fStatFs = C_LINKER.downcallHandle(
@@ -1109,7 +1109,7 @@ public class LocalVFS implements VirtualFileSystem {
       MemorySegment rawStat = MemorySegment.allocateNative(STAT_LAYOUT, scope);
       MemorySegment emptyString = CLinker.toCString("", scope);
 
-      int rc = (int) fStatAt.invokeExact(fd.fd(), emptyString.address(), rawStat.address(), AT_EMPTY_PATH);
+      int rc = (int) fStatAt.invokeExact(0, fd.fd(), rawStat.address());
 
       checkError(rc == 0);
       return toVfsStat(rawStat);
