@@ -1,5 +1,10 @@
 package org.dcache.vfs4j;
 
+import eu.emi.security.authn.x509.X509CertChainValidatorExt;
+import eu.emi.security.authn.x509.helpers.ssl.SSLTrustManager;
+import eu.emi.security.authn.x509.impl.CertificateUtils;
+import eu.emi.security.authn.x509.impl.DirectoryCertChainValidator;
+import eu.emi.security.authn.x509.impl.PEMCredential;
 import org.dcache.nfs.ExportFile;
 import org.dcache.nfs.ExportTable;
 import org.dcache.nfs.v3.MountServer;
@@ -11,45 +16,116 @@ import org.dcache.nfs.vfs.VirtualFileSystem;
 import org.dcache.oncrpc4j.rpc.OncRpcProgram;
 import org.dcache.oncrpc4j.rpc.OncRpcSvc;
 import org.dcache.oncrpc4j.rpc.OncRpcSvcBuilder;
+import picocli.CommandLine;
 
+import javax.net.ssl.KeyManager;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
 import java.io.File;
+import java.io.IOException;
+import java.security.GeneralSecurityException;
+import java.util.List;
 
-public class NfsMain {
+@CommandLine.Command(name = "nfs4j", mixinStandardHelpOptions = true, version = "0.0.1")
+public class NfsMain implements Runnable {
+
+  @CommandLine.Option(
+      names = {"--cert"},
+      description = "PEM encoded host certificate",
+      defaultValue = "hostcert.pem")
+  private String cert;
+
+  @CommandLine.Option(
+      names = {"--key"},
+      description = "PEM encoded host key",
+      defaultValue = "hostkey.pem")
+  private String key;
+
+  @CommandLine.Option(
+      names = "--ca-chain",
+      description = "Trusted CA chain",
+      defaultValue = "ca-chain.pem")
+  private String chain;
+
+  @CommandLine.Option(
+          names = { "--with-tls" },
+          description = "Enable RPC-over-TLS",
+          defaultValue = "false"
+  )
+  private boolean tls;
+
+  @CommandLine.Parameters(index = "0", description = "directory to export")
+  private File dir;
+
+  @CommandLine.Parameters(index = "1", description = "path to export file")
+  private File export;
 
   public static void main(String[] args) throws Exception {
+    new CommandLine(new NfsMain()).execute(args);
+  }
 
-    if (args.length != 2) {
-      System.err.println("Usage: NfsMain <path> <export file>");
-      System.exit(1);
+  public void run() {
+
+    try {
+
+      VirtualFileSystem vfs = new LocalVFS(dir);
+      OncRpcSvc nfsSvc =
+          new OncRpcSvcBuilder()
+              .withPort(2049)
+              .withTCP()
+              .withAutoPublish()
+              .withWorkerThreadIoStrategy()
+              .withStartTLS()
+              .withSSLContext(tls? createSslContext(cert, key, new char[0], chain) : null)
+              .build();
+
+      ExportTable exportFile = new ExportFile(export);
+
+      NFSServerV41 nfs4 =
+          new NFSServerV41.Builder()
+              .withExportTable(exportFile)
+              .withVfs(vfs)
+              .withOperationExecutor(new MDSOperationExecutor())
+              .build();
+
+      NfsServerV3 nfs3 = new NfsServerV3(exportFile, vfs);
+      MountServer mountd = new MountServer(exportFile, vfs);
+
+      nfsSvc.register(new OncRpcProgram(100003, 3), nfs3);
+      nfsSvc.register(new OncRpcProgram(100005, 3), mountd);
+
+      nfsSvc.register(new OncRpcProgram(nfs4_prot.NFS4_PROGRAM, nfs4_prot.NFS_V4), nfs4);
+      nfsSvc.start();
+
+      Thread.currentThread().join();
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  public static SSLContext createSslContext(
+      String certificateFile, String certificateKeyFile, char[] keyPassword, String trustStore)
+      throws IOException, GeneralSecurityException {
+
+    // due to bug in canl https://github.com/eu-emi/canl-java/issues/100 enforce absolute path
+    if (trustStore.charAt(0) != '/') {
+      trustStore = new File(".", trustStore).getAbsolutePath();
     }
 
-    VirtualFileSystem vfs = new LocalVFS(new File(args[0]));
-    OncRpcSvc nfsSvc =
-        new OncRpcSvcBuilder()
-            .withPort(2049)
-            .withTCP()
-            .withAutoPublish()
-            .withWorkerThreadIoStrategy()
-            .build();
+    X509CertChainValidatorExt certificateValidator =
+        new DirectoryCertChainValidator(
+            List.of(trustStore), CertificateUtils.Encoding.PEM, -1, 5000, null);
 
-    ExportTable exportFile = new ExportFile(new File(args[1]));
+    PEMCredential serviceCredentials =
+        new PEMCredential(certificateKeyFile, certificateFile, keyPassword);
 
-    NFSServerV41 nfs4 =
-        new NFSServerV41.Builder()
-            .withExportTable(exportFile)
-            .withVfs(vfs)
-            .withOperationExecutor(new MDSOperationExecutor())
-            .build();
+    KeyManager keyManager = serviceCredentials.getKeyManager();
+    KeyManager[] kms = new KeyManager[] {keyManager};
+    SSLTrustManager tm = new SSLTrustManager(certificateValidator);
 
-    NfsServerV3 nfs3 = new NfsServerV3(exportFile, vfs);
-    MountServer mountd = new MountServer(exportFile, vfs);
+    SSLContext sslCtx = SSLContext.getInstance("TLS");
+    sslCtx.init(kms, new TrustManager[] {tm}, null);
 
-    nfsSvc.register(new OncRpcProgram(100003, 3), nfs3);
-    nfsSvc.register(new OncRpcProgram(100005, 3), mountd);
-
-    nfsSvc.register(new OncRpcProgram(nfs4_prot.NFS4_PROGRAM, nfs4_prot.NFS_V4), nfs4);
-    nfsSvc.start();
-
-    Thread.currentThread().join();
+    return sslCtx;
   }
 }
