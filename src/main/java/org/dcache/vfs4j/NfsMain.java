@@ -25,9 +25,10 @@ import java.io.File;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.List;
+import java.util.concurrent.Callable;
 
 @CommandLine.Command(name = "nfs4j", mixinStandardHelpOptions = true, version = "0.0.1")
-public class NfsMain implements Runnable {
+public class NfsMain implements Callable<Void> {
 
   @CommandLine.Option(
       names = {"--cert"},
@@ -48,10 +49,9 @@ public class NfsMain implements Runnable {
   private String chain;
 
   @CommandLine.Option(
-          names = { "--with-tls" },
-          description = "Enable RPC-over-TLS",
-          defaultValue = "false"
-  )
+      names = {"--with-tls"},
+      description = "Enable RPC-over-TLS",
+      defaultValue = "false")
   private boolean tls;
 
   @CommandLine.Parameters(index = "0", description = "directory to export")
@@ -64,43 +64,40 @@ public class NfsMain implements Runnable {
     new CommandLine(new NfsMain()).execute(args);
   }
 
-  public void run() {
+  public Void call() throws Exception {
 
-    try {
+    VirtualFileSystem vfs = new LocalVFS(dir);
+    OncRpcSvc nfsSvc =
+        new OncRpcSvcBuilder()
+            .withPort(2049)
+            .withTCP()
+            .withAutoPublish()
+            .withWorkerThreadIoStrategy()
+            .withStartTLS()
+            .withSSLContext(tls ? createSslContext(cert, key, new char[0], chain) : null)
+            .build();
 
-      VirtualFileSystem vfs = new LocalVFS(dir);
-      OncRpcSvc nfsSvc =
-          new OncRpcSvcBuilder()
-              .withPort(2049)
-              .withTCP()
-              .withAutoPublish()
-              .withWorkerThreadIoStrategy()
-              .withStartTLS()
-              .withSSLContext(tls? createSslContext(cert, key, new char[0], chain) : null)
-              .build();
+    ExportTable exportFile = new ExportFile(export);
 
-      ExportTable exportFile = new ExportFile(export);
+    NFSServerV41 nfs4 =
+        new NFSServerV41.Builder()
+            .withExportTable(exportFile)
+            .withVfs(vfs)
+            .withOperationExecutor(new MDSOperationExecutor())
+            .build();
 
-      NFSServerV41 nfs4 =
-          new NFSServerV41.Builder()
-              .withExportTable(exportFile)
-              .withVfs(vfs)
-              .withOperationExecutor(new MDSOperationExecutor())
-              .build();
+    NfsServerV3 nfs3 = new NfsServerV3(exportFile, vfs);
+    MountServer mountd = new MountServer(exportFile, vfs);
 
-      NfsServerV3 nfs3 = new NfsServerV3(exportFile, vfs);
-      MountServer mountd = new MountServer(exportFile, vfs);
+    nfsSvc.register(new OncRpcProgram(100003, 3), nfs3);
+    nfsSvc.register(new OncRpcProgram(100005, 3), mountd);
 
-      nfsSvc.register(new OncRpcProgram(100003, 3), nfs3);
-      nfsSvc.register(new OncRpcProgram(100005, 3), mountd);
+    nfsSvc.register(new OncRpcProgram(nfs4_prot.NFS4_PROGRAM, nfs4_prot.NFS_V4), nfs4);
+    nfsSvc.start();
 
-      nfsSvc.register(new OncRpcProgram(nfs4_prot.NFS4_PROGRAM, nfs4_prot.NFS_V4), nfs4);
-      nfsSvc.start();
+    Thread.currentThread().join();
+    return null;
 
-      Thread.currentThread().join();
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
   }
 
   public static SSLContext createSslContext(
