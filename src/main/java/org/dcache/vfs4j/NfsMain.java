@@ -104,11 +104,6 @@ public class NfsMain implements Callable<Void> {
       String certificateFile, String certificateKeyFile, char[] keyPassword, String trustStore)
       throws IOException, GeneralSecurityException {
 
-    // due to bug in canl https://github.com/eu-emi/canl-java/issues/100 enforce absolute path
-    if (trustStore.charAt(0) != '/') {
-      trustStore = new File(".", trustStore).getAbsolutePath();
-    }
-
     X509CertChainValidatorExt certificateValidator =
         new DirectoryCertChainValidator(
             List.of(trustStore), CertificateUtils.Encoding.PEM, -1, 5000, null);
