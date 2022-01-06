@@ -36,6 +36,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.2.0</version>
                 <executions>
                     <execution>
                         <id>copy-dependencies</id>
@@ -62,6 +63,8 @@
                             <!-- Jar file entry point -->
                             <addClasspath>true</addClasspath>
                             <classpathPrefix>lib/</classpathPrefix>
+                            <!-- don't rename SNAPSHOTS -->
+                            <useUniqueVersions>false</useUniqueVersions>
                             <mainClass>org.dcache.vfs4j.NfsMain</mainClass>
                         </manifest>
                         <manifestEntries>
