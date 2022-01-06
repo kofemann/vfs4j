@@ -437,10 +437,11 @@ public class LocalVFS implements VirtualFileSystem {
 
         // FIXME: we should get major and minor numbers from CREATE arguments.
         // dev == (long)major << 32 | minor
-        var dev = MemorySegment.allocateNative(Long.BYTES, scope).asByteBuffer();
+        var ms = MemorySegment.allocateNative(Long.BYTES, scope);
+        var dev = ms.asByteBuffer();
         dev.putLong(0, type == Stat.Type.BLOCK || type == Stat.Type.CHAR ? 1 : 0);
 
-        rc = (int)fMknodeAt.invokeExact(0, fd.fd(), pathRaw.address(),  mode | type.toMode(), dev);
+        rc = (int)fMknodeAt.invokeExact(0, fd.fd(), pathRaw.address(),  mode | type.toMode(), ms);
         checkError(rc >= 0);
         rc = (int) fChownAt.invokeExact(fd.fd(), pathRaw.address(), uid, gid, 0);
         checkError(rc >= 0);
