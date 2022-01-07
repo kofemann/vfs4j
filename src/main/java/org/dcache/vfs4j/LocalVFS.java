@@ -441,7 +441,7 @@ public class LocalVFS implements VirtualFileSystem {
         var dev = ms.asByteBuffer();
         dev.putLong(0, type == Stat.Type.BLOCK || type == Stat.Type.CHAR ? 1 : 0);
 
-        rc = (int)fMknodeAt.invokeExact(0, fd.fd(), pathRaw.address(),  mode | type.toMode(), ms);
+        rc = (int)fMknodeAt.invokeExact(0, fd.fd(), pathRaw.address(),  mode | type.toMode(), ms.address());
         checkError(rc >= 0);
         rc = (int) fChownAt.invokeExact(fd.fd(), pathRaw.address(), uid, gid, 0);
         checkError(rc >= 0);
