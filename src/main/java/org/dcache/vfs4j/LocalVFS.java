@@ -1126,8 +1126,7 @@ public class LocalVFS implements VirtualFileSystem {
     ByteBuffer bb = fileStat.asByteBuffer().order(ByteOrder.nativeOrder());
 
     vfsStat.setDev((int)bb.getLong());
-    vfsStat.setFileid(bb.getLong());
-    vfsStat.setIno((int)vfsStat.getFileId());
+    vfsStat.setIno(bb.getLong());
     vfsStat.setNlink((int)bb.getLong());
     vfsStat.setMode(bb.getInt());
     vfsStat.setGid(bb.getInt());
