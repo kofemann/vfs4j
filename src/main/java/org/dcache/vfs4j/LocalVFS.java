@@ -95,30 +95,78 @@ public class LocalVFS implements VirtualFileSystem {
   /** Cache of directories for fast lookup. */
   private final LoadingCache<Inode, SystemFd> _openDirCache;
 
+  // as in bits/statx-generic.h
+  private final static int STATX_TYPE = 0x0001;
+  private final static int STATX_MODE = 0x0002;
+  private final static int STATX_NLINK = 0x0004;
+  private final static int STATX_UID = 0x0008;
+  private final static int STATX_GID = 0x0010;
+  private final static int STATX_ATIME = 0x0020;
+  private final static int STATX_MTIME = 0x0040;
+  private final static int STATX_CTIME = 0x0080;
+  private final static int STATX_INO = 0x0100;
+  private final static int STATX_SIZE = 0x0200;
+  private final static int STATX_BLOCKS = 0x0400;
+  private final static int STATX_BASIC_STATS = 0x07ff;
+  private final static int STATX_ALL = 0x0fff;
 
-  // struct stat layout
-  public static final GroupLayout STAT_LAYOUT = MemoryLayout.structLayout(
+  private final static int STATX_BTIME = 0x0800;
+  private final static int STATX_MNT_ID = 0x1000;
+  private final static int STATX__RESERVED = 0x80000000;
+  private final static int STATX_ATTR_COMPRESSED = 0x0004;
+  private final static int STATX_ATTR_IMMUTABLE = 0x0010;
+  private final static int STATX_ATTR_APPEND = 0x0020;
+  private final static int STATX_ATTR_NODUMP = 0x0040;
+  private final static int STATX_ATTR_ENCRYPTED = 0x0800;
+  private final static int STATX_ATTR_AUTOMOUNT = 0x1000;
+  private final static int STATX_ATTR_MOUNT_ROOT = 0x2000;
+  private final static int STATX_ATTR_VERITY = 0x100000;
+  private final static int STATX_ATTR_DAX = 0x200000;
 
-          MemoryLayout.valueLayout(64, ByteOrder.nativeOrder()).withName("st_dev"), /* Device. */
-          MemoryLayout.valueLayout(64, ByteOrder.nativeOrder()).withName("st_ino"), /* File serial number.	*/
-          MemoryLayout.valueLayout(64, ByteOrder.nativeOrder()).withName("st_nlink"), /* Object link count.	*/
-          MemoryLayout.valueLayout(32, ByteOrder.nativeOrder()).withName("st_mode"), /* File mode.	*/
-          MemoryLayout.valueLayout(32, ByteOrder.nativeOrder()).withName("st_uid"), /* User ID of the file's owner. */
-          MemoryLayout.valueLayout(32, ByteOrder.nativeOrder()).withName("st_gid"), /* Group ID of the file's owner.*/
-          MemoryLayout.paddingLayout(32), /* unused */
-          MemoryLayout.valueLayout(64, ByteOrder.nativeOrder()).withName("st_rdev"), /* Device number, if device.*/
-          MemoryLayout.valueLayout(64, ByteOrder.nativeOrder()).withName("st_size"), /* File's size in bytes.*/
-          MemoryLayout.valueLayout(64, ByteOrder.nativeOrder()).withName("st_blksize"), /* Optimal block size for IO.*/
-          MemoryLayout.valueLayout(64, ByteOrder.nativeOrder()).withName("st_blocks"), /* Number of 512-byte blocks allocated/ */
-          MemoryLayout.valueLayout(64, ByteOrder.nativeOrder()).withName("st_atime"), /* Time of last access (time_t) .*/
-          MemoryLayout.valueLayout(64, ByteOrder.nativeOrder()).withName("st_atimensec"), /* Time of last access (nannoseconds).*/
-          MemoryLayout.valueLayout(64, ByteOrder.nativeOrder()).withName("st_mtime"), /* Last data modification time (time_t).*/
-          MemoryLayout.valueLayout(64, ByteOrder.nativeOrder()).withName("st_mtimensec"), /* Last data modification time (nanoseconds).*/
-          MemoryLayout.valueLayout(64, ByteOrder.nativeOrder()).withName("st_ctime"), /* Time of last status change (time_t).*/
-          MemoryLayout.valueLayout(64, ByteOrder.nativeOrder()).withName("st_ctimensec"), /* Time of last status change (nanoseconds).*/
-          MemoryLayout.paddingLayout(64), /* unused */
-          MemoryLayout.paddingLayout(64), /* unused */
-          MemoryLayout.paddingLayout(64) /* unused */
+  // struct statx layout as in bits/types/struct_statx.h
+  public static final GroupLayout STATX_LAYOUT = MemoryLayout.structLayout(
+
+          MemoryLayout.valueLayout(32, ByteOrder.nativeOrder()).withName("stx_mask"), /* Mask of bits indicating filled fields. */
+          MemoryLayout.valueLayout(32, ByteOrder.nativeOrder()).withName("stx_blksize"), /* Optimal block size for IO.*/
+          MemoryLayout.valueLayout(64, ByteOrder.nativeOrder()).withName("stx_attributes"), /* Extra file attribute indicators. */
+          MemoryLayout.valueLayout(32, ByteOrder.nativeOrder()).withName("stx_nlink"), /* Object link count.	*/
+          MemoryLayout.valueLayout(32, ByteOrder.nativeOrder()).withName("stx_uid"), /* User ID of the file's owner. */
+          MemoryLayout.valueLayout(32, ByteOrder.nativeOrder()).withName("stx_gid"), /* Group ID of the file's owner.*/
+          MemoryLayout.valueLayout(16, ByteOrder.nativeOrder()).withName("stx_mode"), /* File type and mode.	*/
+          MemoryLayout.paddingLayout(16), /* padding */
+
+          MemoryLayout.valueLayout(64, ByteOrder.nativeOrder()).withName("stx_ino"), /* File inode number.	*/
+          MemoryLayout.valueLayout(64, ByteOrder.nativeOrder()).withName("stx_size"), /* File's size in bytes.*/
+          MemoryLayout.valueLayout(64, ByteOrder.nativeOrder()).withName("stx_blocks"), /* Number of 512-byte blocks allocated */
+          MemoryLayout.valueLayout(64, ByteOrder.nativeOrder()).withName("stx_attributes_mask"), /* Mask of supported attributes */
+
+          /* The following fields are file timestamps */
+          MemoryLayout.valueLayout(64, ByteOrder.nativeOrder()).withName("stx_atime"), /* Last access, sec. */
+          MemoryLayout.valueLayout(32, ByteOrder.nativeOrder()).withName("stx_atimensec"), /* Last access, nannoseconds.*/
+          MemoryLayout.paddingLayout(32), /* padding */
+
+          MemoryLayout.valueLayout(64, ByteOrder.nativeOrder()).withName("stx_btime"), /* Creation time, sec. */
+          MemoryLayout.valueLayout(32, ByteOrder.nativeOrder()).withName("stx_btimensec"), /* Creation time, nannoseconds.*/
+          MemoryLayout.paddingLayout(32), /* padding */
+
+          MemoryLayout.valueLayout(64, ByteOrder.nativeOrder()).withName("stx_ctime"), /* Status change time, sec. */
+          MemoryLayout.valueLayout(32, ByteOrder.nativeOrder()).withName("stx_ctimensec"), /* Status change time, nannoseconds.*/
+          MemoryLayout.paddingLayout(32), /* padding */
+
+          MemoryLayout.valueLayout(64, ByteOrder.nativeOrder()).withName("stx_mtime"), /* Last modification access, sec. */
+          MemoryLayout.valueLayout(32, ByteOrder.nativeOrder()).withName("stx_mtimensec"), /* Last modification access, nannoseconds.*/
+          MemoryLayout.paddingLayout(32), /* padding */
+
+           /* If this file represents a device, then the next two fields contain the ID of the device */
+          MemoryLayout.valueLayout(64, ByteOrder.nativeOrder()).withName("stx_rdev_min"), /* Device. */
+          MemoryLayout.valueLayout(64, ByteOrder.nativeOrder()).withName("stx_rdev_maj"), /* Device number, if device.*/
+
+           /* The next two fields contain the ID of the device containing the filesystem where the file resides */
+
+          MemoryLayout.valueLayout(64, ByteOrder.nativeOrder()).withName("stx_dev_min"), /* Device. */
+          MemoryLayout.valueLayout(64, ByteOrder.nativeOrder()).withName("stx_rdev_max"), /* Device number, if device.*/
+
+          MemoryLayout.sequenceLayout(14, MemoryLayout.paddingLayout(64)) /* padding*/
   );
 
   private static final MemoryLayout STAT_FS_LAYOUT = MemoryLayout.structLayout(
@@ -154,7 +202,7 @@ public class LocalVFS implements VirtualFileSystem {
   private static final MethodHandle fOpenByHandleAt;
   private static final MethodHandle fSync;
   private static final MethodHandle fDataSync;
-  private static final MethodHandle fStatAt;
+  private static final MethodHandle fStatx;
   private static final MethodHandle fStatFs;
   private static final MethodHandle fUnlinkAt;
   private static final MethodHandle fOpendir;
@@ -240,10 +288,10 @@ public class LocalVFS implements VirtualFileSystem {
                     FunctionDescriptor.of(C_INT, C_INT)
             );
 
-    fStatAt = C_LINKER.downcallHandle(
-                    LOOKUP.lookup("__fxstat64").orElseThrow(() -> new NoSuchElementException("fstatat")),
-                    MethodType.methodType(int.class, int.class, int.class, MemoryAddress.class),
-                    FunctionDescriptor.of(C_INT, C_INT, C_INT, C_POINTER)
+    fStatx = C_LINKER.downcallHandle(
+                    LOOKUP.lookup("statx").orElseThrow(() -> new NoSuchElementException("statx")),
+                    MethodType.methodType(int.class, int.class, MemoryAddress.class, int.class, int.class, MemoryAddress.class),
+                    FunctionDescriptor.of(C_INT, C_INT, C_POINTER, C_INT, C_INT, C_POINTER)
             );
 
     fStatFs = C_LINKER.downcallHandle(
@@ -1107,10 +1155,10 @@ public class LocalVFS implements VirtualFileSystem {
 
     try(var scope = ResourceScope.newConfinedScope()) {
 
-      MemorySegment rawStat = MemorySegment.allocateNative(STAT_LAYOUT, scope);
+      MemorySegment rawStat = MemorySegment.allocateNative(STATX_LAYOUT, scope);
       MemorySegment emptyString = CLinker.toCString("", scope);
 
-      int rc = (int) fStatAt.invokeExact(0, fd.fd(), rawStat.address());
+      int rc = (int) fStatx.invokeExact(fd.fd(), emptyString.address(), AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW, STATX_ALL, rawStat.address());
 
       checkError(rc == 0);
       return toVfsStat(rawStat);
@@ -1125,23 +1173,40 @@ public class LocalVFS implements VirtualFileSystem {
 
     ByteBuffer bb = fileStat.asByteBuffer().order(ByteOrder.nativeOrder());
 
-    vfsStat.setDev((int)bb.getLong());
-    vfsStat.setIno(bb.getLong());
-    vfsStat.setNlink((int)bb.getLong());
-    vfsStat.setMode(bb.getInt());
-    vfsStat.setGid(bb.getInt());
+    int valuesMask = bb.getInt(); // mask
+    bb.getInt(); // blksize
+    bb.getLong(); // attributes
+    vfsStat.setNlink(bb.getInt());
     vfsStat.setUid(bb.getInt());
-    bb.getInt(); // padding
-    vfsStat.setRdev((int)bb.getLong());
+    vfsStat.setGid(bb.getInt());
+    vfsStat.setMode(Short.toUnsignedInt(bb.getShort()));
+    bb.getShort(); // padding
+    vfsStat.setIno(bb.getLong());
     vfsStat.setSize(bb.getLong());
-    bb.getLong(); // blksize
     bb.getLong(); // blocks
-    vfsStat.setATime(bb.getLong() * 1000);
-    bb.getLong(); // atimenanos
-    vfsStat.setMTime(bb.getLong() * 1000);
-    bb.getLong(); // mtimenanos
-    vfsStat.setCTime(bb.getLong() * 1000);
-    bb.getLong(); // ctimenanos
+    bb.getLong(); // attributes_mask
+
+    vfsStat.setATime(Math.multiplyExact(bb.getLong(), 1000));
+    bb.getInt(); // atimenanos
+    bb.getInt(); // padding
+
+    vfsStat.setBTime(Math.multiplyExact(bb.getLong(), 1000));
+    bb.getInt(); // btimenanos
+    bb.getInt(); // padding
+
+    vfsStat.setCTime(Math.multiplyExact(bb.getLong(), 1000));
+    bb.getInt(); // ctimenanos
+    bb.getInt(); // padding
+
+    vfsStat.setMTime(Math.multiplyExact(bb.getLong(), 1000));
+    bb.getInt(); // mtimenanos
+    bb.getInt(); // padding
+
+    vfsStat.setRdev(bb.getInt());
+    bb.getInt(); // rdev_maj
+
+    vfsStat.setDev(bb.getInt());
+    bb.getInt(); // dev_maj
 
     vfsStat.setGeneration(Math.max(vfsStat.getCTime(), vfsStat.getMTime()));
 
