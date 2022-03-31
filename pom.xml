@@ -9,7 +9,7 @@
     <url>https://github.com/kofemann/vfs4j</url>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <java.version>17</java.version>
+        <java.version>18</java.version>
     </properties>
 
     <build>
@@ -25,7 +25,7 @@
                      <!-- without forking compilation happens in the
                          same process, so no arguments are applied -->
                     <fork>true</fork>
-                    <executable>/usr/lib/jvm/java-17/bin/javac</executable>
+                    <executable>/usr/lib/jvm/java-18/bin/javac</executable>
                     <compilerArgs>
                         <arg>--add-modules</arg>
                         <arg>jdk.incubator.foreign</arg>
