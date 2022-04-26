@@ -8,7 +8,7 @@ which is based on Linux's open-by-handle API.
 Usage
 -----
 
-The vfs4j uses Java 17 foreign function API which requires additional JVM options.
+The vfs4j uses Java 18 foreign function API which requires additional JVM options.
 
 ```
 $ sudo java --add-modules jdk.incubator.foreign --enable-native-access=ALL-UNNAMED \
