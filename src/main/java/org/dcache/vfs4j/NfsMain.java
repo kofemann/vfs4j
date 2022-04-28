@@ -20,6 +20,7 @@ import picocli.CommandLine;
 
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
 import javax.net.ssl.TrustManager;
 import java.io.File;
 import java.io.IOException;
@@ -54,6 +55,12 @@ public class NfsMain implements Callable<Void> {
       defaultValue = "false")
   private boolean tls;
 
+  @CommandLine.Option(
+          names = {"--with-mutual-tls"},
+          description = "Enable RPC-over-TLS with mutual client authentication",
+          defaultValue = "false")
+  private boolean mutual;
+
   @CommandLine.Parameters(index = "0", description = "directory to export")
   private File dir;
 
@@ -66,6 +73,13 @@ public class NfsMain implements Callable<Void> {
 
   public Void call() throws Exception {
 
+    var sslParameters = new SSLParameters();
+    if (mutual) {
+      tls = true;
+      sslParameters.setNeedClientAuth(true);
+      sslParameters.setWantClientAuth(true);
+    }
+
     VirtualFileSystem vfs = new LocalVFS(dir);
     OncRpcSvc nfsSvc =
         new OncRpcSvcBuilder()
@@ -75,6 +89,7 @@ public class NfsMain implements Callable<Void> {
             .withWorkerThreadIoStrategy()
             .withStartTLS()
             .withSSLContext(tls ? createSslContext(cert, key, new char[0], chain) : null)
+            .withSSLParameters(sslParameters)
             .build();
 
     ExportTable exportFile = new ExportFile(export);
