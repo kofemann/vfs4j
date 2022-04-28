@@ -51,6 +51,12 @@ public class NfsMain implements Callable<Void> {
           defaultValue = "false")
   private boolean mutual;
 
+    @CommandLine.Option(
+            names = {"--insecure"},
+            description = "Skip TLS certificate chain verification step",
+            defaultValue = "false")
+    private boolean insecure;
+
   @CommandLine.Parameters(index = "0", description = "directory to export")
   private File dir;
 
@@ -66,7 +72,7 @@ public class NfsMain implements Callable<Void> {
     SSLParameters sslParameters = null;
     SSLContext sslContext = null;
     if (tls) {
-      sslContext = TlsUtils.createSslContext(cert, key, new char[0], chain);
+      sslContext = TLSUtils.createSslContext(cert, key, new char[0], chain, insecure);
       sslParameters = sslContext.getDefaultSSLParameters();
       sslParameters.setNeedClientAuth(mutual);
     }
