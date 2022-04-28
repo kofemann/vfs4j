@@ -77,7 +77,6 @@ public class NfsMain implements Callable<Void> {
     if (mutual) {
       tls = true;
       sslParameters.setNeedClientAuth(true);
-      sslParameters.setWantClientAuth(true);
     }
 
     VirtualFileSystem vfs = new LocalVFS(dir);
