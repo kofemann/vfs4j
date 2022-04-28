@@ -57,7 +57,7 @@ public class NfsMain implements Callable<Void> {
 
   @CommandLine.Option(
           names = {"--with-mutual-tls"},
-          description = "Enable RPC-over-TLS with mutual client authentication",
+          description = "Enable mutual TLS authentication",
           defaultValue = "false")
   private boolean mutual;
 
@@ -73,10 +73,12 @@ public class NfsMain implements Callable<Void> {
 
   public Void call() throws Exception {
 
-    var sslParameters = new SSLParameters();
-    if (mutual) {
-      tls = true;
-      sslParameters.setNeedClientAuth(true);
+    SSLParameters sslParameters = null;
+    SSLContext sslContext = null;
+    if (tls) {
+      sslContext = TlsUtils.createSslContext(cert, key, new char[0], chain);
+      sslParameters = sslContext.getDefaultSSLParameters();
+      sslParameters.setNeedClientAuth(mutual);
     }
 
     VirtualFileSystem vfs = new LocalVFS(dir);
@@ -87,7 +89,7 @@ public class NfsMain implements Callable<Void> {
             .withAutoPublish()
             .withWorkerThreadIoStrategy()
             .withStartTLS()
-            .withSSLContext(tls ? createSslContext(cert, key, new char[0], chain) : null)
+            .withSSLContext(sslContext)
             .withSSLParameters(sslParameters)
             .build();
 
