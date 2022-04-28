@@ -1,10 +1,5 @@
 package org.dcache.vfs4j;
 
-import eu.emi.security.authn.x509.X509CertChainValidatorExt;
-import eu.emi.security.authn.x509.helpers.ssl.SSLTrustManager;
-import eu.emi.security.authn.x509.impl.CertificateUtils;
-import eu.emi.security.authn.x509.impl.DirectoryCertChainValidator;
-import eu.emi.security.authn.x509.impl.PEMCredential;
 import org.dcache.nfs.ExportFile;
 import org.dcache.nfs.ExportTable;
 import org.dcache.nfs.v3.MountServer;
@@ -18,14 +13,9 @@ import org.dcache.oncrpc4j.rpc.OncRpcSvc;
 import org.dcache.oncrpc4j.rpc.OncRpcSvcBuilder;
 import picocli.CommandLine;
 
-import javax.net.ssl.KeyManager;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
-import javax.net.ssl.TrustManager;
 import java.io.File;
-import java.io.IOException;
-import java.security.GeneralSecurityException;
-import java.util.List;
 import java.util.concurrent.Callable;
 
 @CommandLine.Command(name = "nfs4j", mixinStandardHelpOptions = true, version = "0.0.1")
@@ -113,27 +103,5 @@ public class NfsMain implements Callable<Void> {
 
     Thread.currentThread().join();
     return null;
-
-  }
-
-  public static SSLContext createSslContext(
-      String certificateFile, String certificateKeyFile, char[] keyPassword, String trustStore)
-      throws IOException, GeneralSecurityException {
-
-    X509CertChainValidatorExt certificateValidator =
-        new DirectoryCertChainValidator(
-            List.of(trustStore), CertificateUtils.Encoding.PEM, -1, 5000, null);
-
-    PEMCredential serviceCredentials =
-        new PEMCredential(certificateKeyFile, certificateFile, keyPassword);
-
-    KeyManager keyManager = serviceCredentials.getKeyManager();
-    KeyManager[] kms = new KeyManager[] {keyManager};
-    SSLTrustManager tm = new SSLTrustManager(certificateValidator);
-
-    SSLContext sslCtx = SSLContext.getInstance("TLS");
-    sslCtx.init(kms, new TrustManager[] {tm}, null);
-
-    return sslCtx;
   }
 }
