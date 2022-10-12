@@ -10,6 +10,16 @@ import com.google.common.cache.RemovalNotification;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
+import java.lang.foreign.FunctionDescriptor;
+import java.lang.foreign.GroupLayout;
+import java.lang.foreign.Linker;
+import java.lang.foreign.MemoryAddress;
+import java.lang.foreign.MemoryLayout;
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.MemorySession;
+import java.lang.foreign.SegmentAllocator;
+import java.lang.foreign.SymbolLookup;
+import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -24,15 +34,6 @@ import java.util.concurrent.ExecutionException;
 import javax.annotation.Nonnull;
 import javax.security.auth.Subject;
 
-import jdk.incubator.foreign.CLinker;
-import jdk.incubator.foreign.FunctionDescriptor;
-import jdk.incubator.foreign.GroupLayout;
-import jdk.incubator.foreign.MemoryAddress;
-import jdk.incubator.foreign.MemoryLayout;
-import jdk.incubator.foreign.MemorySegment;
-import jdk.incubator.foreign.ResourceScope;
-import jdk.incubator.foreign.SegmentAllocator;
-import jdk.incubator.foreign.ValueLayout;
 import org.dcache.nfs.status.*;
 
 import org.dcache.nfs.util.UnixSubjects;
@@ -49,8 +50,8 @@ import org.dcache.nfs.vfs.VirtualFileSystem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static java.lang.foreign.ValueLayout.*;
 import static java.nio.charset.StandardCharsets.UTF_8;
-import static jdk.incubator.foreign.ValueLayout.*;
 
 /** A file system which implementation with is backed-up with a local file system. */
 public class LocalVFS implements VirtualFileSystem {
@@ -126,68 +127,68 @@ public class LocalVFS implements VirtualFileSystem {
   // struct statx layout as in bits/types/struct_statx.h
   public static final GroupLayout STATX_LAYOUT = MemoryLayout.structLayout(
 
-          ValueLayout.JAVA_INT.withName("stx_mask"), /* Mask of bits indicating filled fields. */
-          ValueLayout.JAVA_INT.withName("stx_blksize"), /* Optimal block size for IO.*/
-          ValueLayout.JAVA_LONG.withName("stx_attributes"), /* Extra file attribute indicators. */
-          ValueLayout.JAVA_INT.withName("stx_nlink"), /* Object link count.	*/
-          ValueLayout.JAVA_INT.withName("stx_uid"), /* User ID of the file's owner. */
-          ValueLayout.JAVA_INT.withName("stx_gid"), /* Group ID of the file's owner.*/
+          JAVA_INT.withName("stx_mask"), /* Mask of bits indicating filled fields. */
+          JAVA_INT.withName("stx_blksize"), /* Optimal block size for IO.*/
+          JAVA_LONG.withName("stx_attributes"), /* Extra file attribute indicators. */
+          JAVA_INT.withName("stx_nlink"), /* Object link count.	*/
+          JAVA_INT.withName("stx_uid"), /* User ID of the file's owner. */
+          JAVA_INT.withName("stx_gid"), /* Group ID of the file's owner.*/
           ValueLayout.JAVA_SHORT.withName("stx_mode"), /* File type and mode.	*/
           MemoryLayout.paddingLayout(16), /* padding */
 
-          ValueLayout.JAVA_LONG.withName("stx_ino"), /* File inode number.	*/
-          ValueLayout.JAVA_LONG.withName("stx_size"), /* File's size in bytes.*/
-          ValueLayout.JAVA_LONG.withName("stx_blocks"), /* Number of 512-byte blocks allocated */
-          ValueLayout.JAVA_LONG.withName("stx_attributes_mask"), /* Mask of supported attributes */
+          JAVA_LONG.withName("stx_ino"), /* File inode number.	*/
+          JAVA_LONG.withName("stx_size"), /* File's size in bytes.*/
+          JAVA_LONG.withName("stx_blocks"), /* Number of 512-byte blocks allocated */
+          JAVA_LONG.withName("stx_attributes_mask"), /* Mask of supported attributes */
 
           /* The following fields are file timestamps */
-          ValueLayout.JAVA_LONG.withName("stx_atime"), /* Last access, sec. */
-          ValueLayout.JAVA_INT.withName("stx_atimensec"), /* Last access, nannoseconds.*/
+          JAVA_LONG.withName("stx_atime"), /* Last access, sec. */
+          JAVA_INT.withName("stx_atimensec"), /* Last access, nannoseconds.*/
           MemoryLayout.paddingLayout(32), /* padding */
 
-          ValueLayout.JAVA_LONG.withName("stx_btime"), /* Creation time, sec. */
-          ValueLayout.JAVA_INT.withName("stx_btimensec"), /* Creation time, nannoseconds.*/
+          JAVA_LONG.withName("stx_btime"), /* Creation time, sec. */
+          JAVA_INT.withName("stx_btimensec"), /* Creation time, nannoseconds.*/
           MemoryLayout.paddingLayout(32), /* padding */
 
-          ValueLayout.JAVA_LONG.withName("stx_ctime"), /* Status change time, sec. */
-          ValueLayout.JAVA_INT.withName("stx_ctimensec"), /* Status change time, nannoseconds.*/
+          JAVA_LONG.withName("stx_ctime"), /* Status change time, sec. */
+          JAVA_INT.withName("stx_ctimensec"), /* Status change time, nannoseconds.*/
           MemoryLayout.paddingLayout(32), /* padding */
 
-          ValueLayout.JAVA_LONG.withName("stx_mtime"), /* Last modification access, sec. */
-          ValueLayout.JAVA_INT.withName("stx_mtimensec"), /* Last modification access, nannoseconds.*/
+          JAVA_LONG.withName("stx_mtime"), /* Last modification access, sec. */
+          JAVA_INT.withName("stx_mtimensec"), /* Last modification access, nannoseconds.*/
           MemoryLayout.paddingLayout(32), /* padding */
 
            /* If this file represents a device, then the next two fields contain the ID of the device */
-          ValueLayout.JAVA_LONG.withName("stx_rdev_min"), /* Device. */
-          ValueLayout.JAVA_LONG.withName("stx_rdev_maj"), /* Device number, if device.*/
+          JAVA_LONG.withName("stx_rdev_min"), /* Device. */
+          JAVA_LONG.withName("stx_rdev_maj"), /* Device number, if device.*/
 
            /* The next two fields contain the ID of the device containing the filesystem where the file resides */
 
-          ValueLayout.JAVA_LONG.withName("stx_dev_min"), /* Device. */
-          ValueLayout.JAVA_LONG.withName("stx_rdev_max"), /* Device number, if device.*/
+          JAVA_LONG.withName("stx_dev_min"), /* Device. */
+          JAVA_LONG.withName("stx_rdev_max"), /* Device number, if device.*/
 
           MemoryLayout.sequenceLayout(14, MemoryLayout.paddingLayout(64)) /* padding*/
   );
 
   private static final MemoryLayout STAT_FS_LAYOUT = MemoryLayout.structLayout(
-          ValueLayout.JAVA_LONG.withName("type"),
-          ValueLayout.JAVA_LONG.withName("bsize"),
-          ValueLayout.JAVA_LONG.withName("block"),
-          ValueLayout.JAVA_LONG.withName("free"),
-          ValueLayout.JAVA_LONG.withName("bavail"),
+          JAVA_LONG.withName("type"),
+          JAVA_LONG.withName("bsize"),
+          JAVA_LONG.withName("block"),
+          JAVA_LONG.withName("free"),
+          JAVA_LONG.withName("bavail"),
 
-          ValueLayout.JAVA_LONG.withName("files"),
-          ValueLayout.JAVA_LONG.withName("ffree"),
-          ValueLayout.JAVA_LONG.withName("fsid"),
-          ValueLayout.JAVA_LONG.withName("namelen"),
-          ValueLayout.JAVA_LONG.withName("frsize"),
-          ValueLayout.JAVA_LONG.withName("flags"),
-          MemoryLayout.sequenceLayout(6, ValueLayout.JAVA_INT).withName("spare")
+          JAVA_LONG.withName("files"),
+          JAVA_LONG.withName("ffree"),
+          JAVA_LONG.withName("fsid"),
+          JAVA_LONG.withName("namelen"),
+          JAVA_LONG.withName("frsize"),
+          JAVA_LONG.withName("flags"),
+          MemoryLayout.sequenceLayout(6, JAVA_INT).withName("spare")
   );
 
   private static final MemoryLayout DIRENT_LAYOUT = MemoryLayout.structLayout(
-          ValueLayout.JAVA_LONG.withName("ino"),
-          ValueLayout.JAVA_LONG.withName("off"),
+          JAVA_LONG.withName("ino"),
+          JAVA_LONG.withName("off"),
           ValueLayout.JAVA_SHORT.withName("reclen"),
           ValueLayout.JAVA_BYTE.withName("type"),
           MemoryLayout.sequenceLayout(MAX_NAME_LEN, ValueLayout.JAVA_BYTE).withName("name")
@@ -228,168 +229,170 @@ public class LocalVFS implements VirtualFileSystem {
 
   private static final MethodHandle fErrono;
 
-  private static final CLinker LINKER = CLinker.systemCLinker();
+  private static final Linker LINKER = Linker.nativeLinker();
 
   static {
 
+    SymbolLookup stdlib = LINKER.defaultLookup();
+
     // magic function that return pointer to errno variable
     fErrono = LINKER.downcallHandle(
-            LINKER.lookup("__errno_location").orElseThrow(() -> new NoSuchElementException("__errno_location")),
+            stdlib.lookup("__errno_location").orElseThrow(() -> new NoSuchElementException("__errno_location")),
                     FunctionDescriptor.of(ADDRESS)
             );
 
     fStrerror = LINKER.downcallHandle(
-                    LINKER.lookup("strerror").orElseThrow(() -> new NoSuchElementException("strerror")),
+            stdlib.lookup("strerror").orElseThrow(() -> new NoSuchElementException("strerror")),
                     FunctionDescriptor.of(ADDRESS, JAVA_INT)
             );
 
     fOpen = LINKER.downcallHandle(
-                    LINKER.lookup("open").orElseThrow(() -> new NoSuchElementException("open")),
+            stdlib.lookup("open").orElseThrow(() -> new NoSuchElementException("open")),
                     FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT)
             );
 
     fOpenAt = LINKER.downcallHandle(
-                    LINKER.lookup("openat").orElseThrow(() -> new NoSuchElementException("openat")),
+            stdlib.lookup("openat").orElseThrow(() -> new NoSuchElementException("openat")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT)
             );
 
     fClose = LINKER.downcallHandle(
-                    LINKER.lookup("close").orElseThrow(() -> new NoSuchElementException("close")),
+            stdlib.lookup("close").orElseThrow(() -> new NoSuchElementException("close")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT)
             );
 
     fNameToHandleAt = LINKER.downcallHandle(
-                    LINKER.lookup("name_to_handle_at").orElseThrow(() -> new NoSuchElementException("name_to_handle_at")),
+            stdlib.lookup("name_to_handle_at").orElseThrow(() -> new NoSuchElementException("name_to_handle_at")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, ADDRESS, ADDRESS, JAVA_INT)
             );
 
     fOpenByHandleAt = LINKER.downcallHandle(
-                    LINKER.lookup("open_by_handle_at").orElseThrow(() -> new NoSuchElementException("open_by_handle_at")),
+            stdlib.lookup("open_by_handle_at").orElseThrow(() -> new NoSuchElementException("open_by_handle_at")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT)
             );
 
     fDataSync = LINKER.downcallHandle(
-                    LINKER.lookup("fdatasync").orElseThrow(() -> new NoSuchElementException("fdatasync")),
+            stdlib.lookup("fdatasync").orElseThrow(() -> new NoSuchElementException("fdatasync")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT)
             );
 
     fSync = LINKER.downcallHandle(
-                    LINKER.lookup("fsync").orElseThrow(() -> new NoSuchElementException("fsync")),
+            stdlib.lookup("fsync").orElseThrow(() -> new NoSuchElementException("fsync")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT)
             );
 
     fStatx = LINKER.downcallHandle(
-                    LINKER.lookup("statx").orElseThrow(() -> new NoSuchElementException("statx")),
+            stdlib.lookup("statx").orElseThrow(() -> new NoSuchElementException("statx")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT, ADDRESS)
             );
 
     fStatFs = LINKER.downcallHandle(
-                    LINKER.lookup("fstatfs").orElseThrow(() -> new NoSuchElementException("fstatfs")),
+            stdlib.lookup("fstatfs").orElseThrow(() -> new NoSuchElementException("fstatfs")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS)
             );
 
     fUnlinkAt = LINKER.downcallHandle(
-                    LINKER.lookup("unlinkat").orElseThrow(() -> new NoSuchElementException("unlinkat")),
+            stdlib.lookup("unlinkat").orElseThrow(() -> new NoSuchElementException("unlinkat")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT)
             );
 
     fOpendir = LINKER.downcallHandle(
-                    LINKER.lookup("fdopendir").orElseThrow(() -> new NoSuchElementException("fdopendir")),
+            stdlib.lookup("fdopendir").orElseThrow(() -> new NoSuchElementException("fdopendir")),
                     FunctionDescriptor.of(ADDRESS, JAVA_INT)
             );
 
     fReaddir = LINKER.downcallHandle(
-                    LINKER.lookup("readdir").orElseThrow(() -> new NoSuchElementException("readdir")),
+            stdlib.lookup("readdir").orElseThrow(() -> new NoSuchElementException("readdir")),
                     FunctionDescriptor.of(ADDRESS, ADDRESS)
             );
 
     fSeekdir = LINKER.downcallHandle(
-                    LINKER.lookup("seekdir").orElseThrow(() -> new NoSuchElementException("seekdir")),
+            stdlib.lookup("seekdir").orElseThrow(() -> new NoSuchElementException("seekdir")),
                     FunctionDescriptor.ofVoid(ADDRESS, JAVA_LONG)
             );
 
     fPread = LINKER.downcallHandle(
-                    LINKER.lookup("pread").orElseThrow(() -> new NoSuchElementException("pread")),
+            stdlib.lookup("pread").orElseThrow(() -> new NoSuchElementException("pread")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, JAVA_LONG)
             );
 
     fPwrite = LINKER.downcallHandle(
-            LINKER.lookup("pwrite").orElseThrow(() -> new NoSuchElementException("pwrite")),
+            stdlib.lookup("pwrite").orElseThrow(() -> new NoSuchElementException("pwrite")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, JAVA_LONG)
     );
 
     fSymlinkAt = LINKER.downcallHandle(
-                    LINKER.lookup("symlinkat").orElseThrow(() -> new NoSuchElementException("symlinkat")),
+            stdlib.lookup("symlinkat").orElseThrow(() -> new NoSuchElementException("symlinkat")),
                     FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT, ADDRESS)
             );
 
     fRenameAt = LINKER.downcallHandle(
-                    LINKER.lookup("renameat").orElseThrow(() -> new NoSuchElementException("renameat")),
+            stdlib.lookup("renameat").orElseThrow(() -> new NoSuchElementException("renameat")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, ADDRESS)
             );
 
     fReadlinkAt = LINKER.downcallHandle(
-            LINKER.lookup("readlinkat").orElseThrow(() -> new NoSuchElementException("readlinkat")),
+            stdlib.lookup("readlinkat").orElseThrow(() -> new NoSuchElementException("readlinkat")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, ADDRESS, JAVA_INT)
     );
 
     fChownAt = LINKER.downcallHandle(
-            LINKER.lookup("fchownat").orElseThrow(() -> new NoSuchElementException("fchownat")),
+            stdlib.lookup("fchownat").orElseThrow(() -> new NoSuchElementException("fchownat")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT, JAVA_INT)
     );
 
     fMkdirAt = LINKER.downcallHandle(
-            LINKER.lookup("mkdirat").orElseThrow(() -> new NoSuchElementException("mkdirat")),
+            stdlib.lookup("mkdirat").orElseThrow(() -> new NoSuchElementException("mkdirat")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT)
     );
 
     fChmod = LINKER.downcallHandle(
-            LINKER.lookup("fchmod").orElseThrow(() -> new NoSuchElementException("fchmod")),
+            stdlib.lookup("fchmod").orElseThrow(() -> new NoSuchElementException("fchmod")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, JAVA_INT)
     );
 
     fFtruncate = LINKER.downcallHandle(
-            LINKER.lookup("ftruncate").orElseThrow(() -> new NoSuchElementException("ftruncate")),
+            stdlib.lookup("ftruncate").orElseThrow(() -> new NoSuchElementException("ftruncate")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, JAVA_LONG)
     );
 
     fLinkAt = LINKER.downcallHandle(
-            LINKER.lookup("linkat").orElseThrow(() -> new NoSuchElementException("linkat")),
+            stdlib.lookup("linkat").orElseThrow(() -> new NoSuchElementException("linkat")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, ADDRESS, JAVA_INT)
     );
 
     fCopyFileRange = LINKER.downcallHandle(
-            LINKER.lookup("copy_file_range").orElseThrow(() -> new NoSuchElementException("copy_file_range")),
+            stdlib.lookup("copy_file_range").orElseThrow(() -> new NoSuchElementException("copy_file_range")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, ADDRESS, JAVA_LONG, JAVA_INT)
     );
 
     fListxattr  = LINKER.downcallHandle(
-            LINKER.lookup("flistxattr").orElseThrow(() -> new NoSuchElementException("flistxattr")),
+            stdlib.lookup("flistxattr").orElseThrow(() -> new NoSuchElementException("flistxattr")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT)
     );
 
     fGetxattr  = LINKER.downcallHandle(
-            LINKER.lookup("fgetxattr").orElseThrow(() -> new NoSuchElementException("fgetxattr")),
+            stdlib.lookup("fgetxattr").orElseThrow(() -> new NoSuchElementException("fgetxattr")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, ADDRESS, JAVA_INT)
     );
 
     fSetxattr  = LINKER.downcallHandle(
-            LINKER.lookup("fsetxattr").orElseThrow(() -> new NoSuchElementException("fsetxattr")),
+            stdlib.lookup("fsetxattr").orElseThrow(() -> new NoSuchElementException("fsetxattr")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, ADDRESS, JAVA_INT, JAVA_INT)
     );
 
     fRemovexattr  = LINKER.downcallHandle(
-            LINKER.lookup("fremovexattr").orElseThrow(() -> new NoSuchElementException("fremovexattr")),
+            stdlib.lookup("fremovexattr").orElseThrow(() -> new NoSuchElementException("fremovexattr")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS)
     );
 
     fMknodeAt = LINKER.downcallHandle(
-            LINKER.lookup("__xmknodat").orElseThrow(() -> new NoSuchElementException("__xmknodat")),
+            stdlib.lookup("__xmknodat").orElseThrow(() -> new NoSuchElementException("__xmknodat")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, ADDRESS)
     );
 
     fIoctl  = LINKER.downcallHandle(
-            LINKER.lookup("ioctl").orElseThrow(() -> new NoSuchElementException("ioctl")),
+            stdlib.lookup("ioctl").orElseThrow(() -> new NoSuchElementException("ioctl")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, JAVA_INT, ADDRESS)
     );
   }
@@ -430,7 +433,7 @@ public class LocalVFS implements VirtualFileSystem {
       throw new NotSuppException("create of this type not supported");
     }
 
-    try (var scope = ResourceScope.newConfinedScope()) {
+    try (var scope = MemorySession.openConfined()) {
 
       SystemFd fd = _openDirCache.get(parent);
 
@@ -472,7 +475,7 @@ public class LocalVFS implements VirtualFileSystem {
   @Override
   public FsStat getFsStat() throws IOException {
 
-    try(var scope = ResourceScope.newConfinedScope()) {
+    try(var scope = MemorySession.openConfined()) {
 
       MemorySegment rawStatFS = MemorySegment.allocateNative(STAT_FS_LAYOUT, scope);
       int rc = (int)fStatFs.invoke(rootFd, rawStatFS);
@@ -533,7 +536,7 @@ public class LocalVFS implements VirtualFileSystem {
   @Override
   public Inode link(Inode parent, Inode link, String path, Subject subject) throws IOException {
     try (SystemFd dirFd = inode2fd(parent, O_NOFOLLOW | O_DIRECTORY);
-         SystemFd inodeFd = inode2fd(link, O_NOFOLLOW); var scope = ResourceScope.newConfinedScope()) {
+         SystemFd inodeFd = inode2fd(link, O_NOFOLLOW); var scope = MemorySession.openConfined()) {
 
       SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
       var emptyString = allocator.allocateUtf8String("");
@@ -553,7 +556,7 @@ public class LocalVFS implements VirtualFileSystem {
   public DirectoryStream list(Inode inode, byte[] verifier, long cookie) throws IOException {
 
     TreeSet<DirectoryEntry> list = new TreeSet<>();
-    try (var scope = ResourceScope.newConfinedScope()) {
+    try (var scope = MemorySession.openConfined()) {
 
       SystemFd fd = _openDirCache.get(inode);
       MemoryAddress p = (MemoryAddress) fOpendir.invoke(fd.fd());
@@ -596,7 +599,7 @@ public class LocalVFS implements VirtualFileSystem {
     int gid = (int) UnixSubjects.getPrimaryGid(subject);
 
     Inode inode;
-    try (var scope = ResourceScope.newConfinedScope()) {
+    try (var scope = MemorySession.openConfined()) {
 
       SystemFd fd = _openDirCache.get(parent);
 
@@ -622,7 +625,7 @@ public class LocalVFS implements VirtualFileSystem {
   public boolean move(Inode src, String oldName, Inode dest, String newName) throws IOException {
     try (SystemFd fd1 = inode2fd(src, O_PATH | O_NOACCESS );
          SystemFd fd2 = inode2fd(dest, O_PATH | O_NOACCESS);
-         var scope = ResourceScope.newConfinedScope()) {
+         var scope = MemorySession.openConfined()) {
 
       SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
       MemorySegment newNameRaw = allocator.allocateUtf8String(newName);
@@ -661,8 +664,8 @@ public class LocalVFS implements VirtualFileSystem {
       bb.clear().limit(data.remaining());
     }
 
-    try (var scope = ResourceScope.newConfinedScope()) {
-        MemorySegment rawData = MemorySegment.ofByteBuffer(bb);
+    try (var scope = MemorySession.openConfined()) {
+        MemorySegment rawData = MemorySegment.ofBuffer(bb);
 
         int n = (int)fPread.invoke(fd.fd(), rawData, data.remaining(), offset);
         checkError(n >=0);
@@ -682,7 +685,7 @@ public class LocalVFS implements VirtualFileSystem {
   @Override
   public String readlink(Inode inode) throws IOException {
     try (SystemFd fd = inode2fd(inode, O_PATH | O_NOFOLLOW);
-        var scope = ResourceScope.newConfinedScope()) {
+        var scope = MemorySession.openConfined()) {
 
       SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
       var emptyString = allocator.allocateUtf8String("");
@@ -702,7 +705,7 @@ public class LocalVFS implements VirtualFileSystem {
 
   @Override
   public void remove(Inode parent, String path) throws IOException {
-    try (var scope = ResourceScope.newConfinedScope()) {
+    try (var scope = MemorySession.openConfined()) {
 
       SystemFd fd = _openDirCache.get(parent);
       SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
@@ -724,7 +727,7 @@ public class LocalVFS implements VirtualFileSystem {
     int uid = (int) UnixSubjects.getUid(subject);
     int gid = (int) UnixSubjects.getPrimaryGid(subject);
 
-    try (var scope = ResourceScope.newConfinedScope()) {
+    try (var scope = MemorySession.openConfined()) {
 
       SystemFd fd = _openDirCache.get(parent);
 
@@ -769,7 +772,7 @@ public class LocalVFS implements VirtualFileSystem {
     }
 
     try {
-      MemorySegment dataRaw = MemorySegment.ofByteBuffer(bb);
+      MemorySegment dataRaw = MemorySegment.ofBuffer(bb);
       int n = (int)fPwrite.invoke(fd.fd(), dataRaw, bb.remaining(), offset);
       checkError(n >= 0);
 
@@ -829,7 +832,7 @@ public class LocalVFS implements VirtualFileSystem {
       openMode |= O_RDWR;
     }
 
-    try (SystemFd fd = inode2fd(inode, openMode); var scope = ResourceScope.newConfinedScope()) {
+    try (SystemFd fd = inode2fd(inode, openMode); var scope = MemorySession.openConfined()) {
 
       SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
       var emptyString = allocator.allocateUtf8String("");
@@ -923,7 +926,7 @@ public class LocalVFS implements VirtualFileSystem {
   @Override
   public String[] listXattrs(Inode inode) throws IOException {
 
-    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var scope = ResourceScope.newConfinedScope()) {
+    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var scope = MemorySession.openConfined()) {
 
       var out = MemorySegment.allocateNative(1024, scope);
       int rc = (int)fListxattr.invoke(fd.fd(), out, (int)out.byteSize());
@@ -949,7 +952,7 @@ public class LocalVFS implements VirtualFileSystem {
   @Override
   public byte[] getXattr(Inode inode, String name) throws IOException {
 
-    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var scope = ResourceScope.newConfinedScope()) {
+    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var scope = MemorySession.openConfined()) {
 
       SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
 
@@ -977,11 +980,11 @@ public class LocalVFS implements VirtualFileSystem {
     var data = ByteBuffer.allocateDirect(value.length);
     data.put(value);
 
-    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var scope = ResourceScope.newConfinedScope()) {
+    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var scope = MemorySession.openConfined()) {
       SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
 
       var attrName = allocator.allocateUtf8String(toXattrName(attr));
-      var dataRaw = MemorySegment.ofByteBuffer(data);
+      var dataRaw = MemorySegment.ofBuffer(data);
       int rc = (int)fSetxattr.invoke(fd.fd(), attrName, dataRaw, value.length, flag);
       checkError(rc == 0);
     } catch (Throwable t) {
@@ -992,7 +995,7 @@ public class LocalVFS implements VirtualFileSystem {
 
   @Override
   public void removeXattr(Inode inode, String attr) throws IOException {
-    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var scope = ResourceScope.newConfinedScope()) {
+    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var scope = MemorySession.openConfined()) {
       SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
       var attrName = allocator.allocateUtf8String(toXattrName(attr));
       int rc = (int)fRemovexattr.invoke(fd.fd(), attrName);
@@ -1018,7 +1021,7 @@ public class LocalVFS implements VirtualFileSystem {
 
     return CompletableFuture.supplyAsync(
             () -> {
-              try (var scope = ResourceScope.newConfinedScope()) {
+              try (var scope = MemorySession.openConfined()) {
 
                 var srcPosRef = MemorySegment.allocateNative(Long.BYTES, scope);
                 var dstPosRef = MemorySegment.allocateNative(Long.BYTES, scope);
@@ -1055,7 +1058,7 @@ public class LocalVFS implements VirtualFileSystem {
    */
   private KernelFileHandle path2fh(int fd, String path, int flags) throws IOException {
 
-    try(var scope = ResourceScope.newConfinedScope()){
+    try(var scope = MemorySession.openConfined()){
 
       SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
 
@@ -1122,7 +1125,7 @@ public class LocalVFS implements VirtualFileSystem {
   private SystemFd inode2fd(Inode inode, int flags) throws IOException {
     KernelFileHandle fh = new KernelFileHandle(inode);
     byte[] fhBytes = fh.toBytes();
-    try (var scope = ResourceScope.newConfinedScope()){
+    try (var scope = MemorySession.openConfined()){
 
       MemorySegment rawHandle = MemorySegment.allocateNative(fhBytes.length, scope);
       rawHandle.asByteBuffer().put(fhBytes);
@@ -1137,7 +1140,7 @@ public class LocalVFS implements VirtualFileSystem {
 
   private Stat statByFd(SystemFd fd) throws IOException {
 
-    try(var scope = ResourceScope.newConfinedScope()) {
+    try(var scope = MemorySession.openConfined()) {
 
       MemorySegment rawStat = MemorySegment.allocateNative(STATX_LAYOUT, scope);
       SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
@@ -1237,7 +1240,7 @@ public class LocalVFS implements VirtualFileSystem {
     bb.put(data);
     bb.flip();
     try {
-      var dataRaw = MemorySegment.ofByteBuffer(bb);
+      var dataRaw = MemorySegment.ofBuffer(bb);
       return (int)fIoctl.invoke(fd, request, dataRaw);
     }  catch (Throwable t) {
       Throwables.throwIfInstanceOf(t, IOException.class);
@@ -1256,7 +1259,7 @@ public class LocalVFS implements VirtualFileSystem {
   }
 
   private int open(String name, int flags, int mode) {
-    try(var scope = ResourceScope.newConfinedScope()){
+    try(var scope = MemorySession.openConfined()){
       SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
 
       MemorySegment str = allocator.allocateUtf8String(name);
@@ -1295,7 +1298,7 @@ public class LocalVFS implements VirtualFileSystem {
   }
 
   private int errno() {
-    try (var scope = ResourceScope.newConfinedScope()) {
+    try (var scope = MemorySession.openConfined()) {
       MemoryAddress a = (MemoryAddress)fErrono.invoke();
       return a.get(JAVA_INT, 0);
     } catch (Throwable t) {
