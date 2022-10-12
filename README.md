@@ -60,4 +60,9 @@ then you just add a line saying ( git commit -s )
 
 using your real name (sorry, no pseudonyms or anonymous contributions.)
 
+## License
+
+This work is published under the [Apache License 2.0][2]
+
 [1]: https://bugs.openjdk.org/browse/JDK-8282048
+[2]: LICENSE
