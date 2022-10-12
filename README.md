@@ -1,24 +1,21 @@
-VFS4J
-=====
+# VFS4J
 
 An implementation of nfs4j's VirtualFileSystem interface
 which is based on Linux's open-by-handle API.
 
+## Usage
 
-Usage
------
 
-The vfs4j uses Java 18 foreign function API which requires additional JVM options.
+The vfs4j uses Java 19 [Foreign Function (Preview) API][1] which requires additional JVM options.
 
 ```
-$ sudo java --add-modules jdk.incubator.foreign --enable-native-access=ALL-UNNAMED \
+$ sudo java --enable-preview --enable-native-access=ALL-UNNAMED \
     -jar target/vfs4j-1.0-SNAPSHOT.jar /directory/to/export /path/to/export/file
 ```
 
 The **exports** file is compatible with standard **/etc/exports** file format.
 
-How to contribute
-=================
+## How to contribute
 
 **VFS4J** uses the linux kernel model where git is not only source repository,
 but also the way to track contributions and copyrights.
@@ -31,7 +28,6 @@ patch, which certifies that you wrote it or otherwise have the right to
 pass it on as an open-source patch.  The rules are pretty simple: if you
 can certify the below:
 ```
-
     Developer's Certificate of Origin 1.1
 
     By making a contribution to this project, I certify that:
@@ -57,10 +53,11 @@ can certify the below:
         personal information I submit with it, including my sign-off) is
         maintained indefinitely and may be redistributed consistent with
         this project or the open source license(s) involved.
-
 ```
 then you just add a line saying ( git commit -s )
 
     Signed-off-by: Random J Developer <random@developer.example.org>
 
 using your real name (sorry, no pseudonyms or anonymous contributions.)
+
+[1]: https://bugs.openjdk.org/browse/JDK-8282048
