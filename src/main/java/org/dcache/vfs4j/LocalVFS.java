@@ -229,169 +229,171 @@ public class LocalVFS implements VirtualFileSystem {
 
   private static final MethodHandle fErrono;
 
-  private static final Linker LINKER = Linker.nativeLinker();
-
   static {
 
-    SymbolLookup stdlib = LINKER.defaultLookup();
+    // The Foreign Function & Memory API
+    // https://bugs.openjdk.org/browse/JDK-8282048
+
+    Linker linker = Linker.nativeLinker();
+    SymbolLookup stdlib = linker.defaultLookup();
 
     // magic function that return pointer to errno variable
-    fErrono = LINKER.downcallHandle(
+    fErrono = linker.downcallHandle(
             stdlib.lookup("__errno_location").orElseThrow(() -> new NoSuchElementException("__errno_location")),
                     FunctionDescriptor.of(ADDRESS)
             );
 
-    fStrerror = LINKER.downcallHandle(
+    fStrerror = linker.downcallHandle(
             stdlib.lookup("strerror").orElseThrow(() -> new NoSuchElementException("strerror")),
                     FunctionDescriptor.of(ADDRESS, JAVA_INT)
             );
 
-    fOpen = LINKER.downcallHandle(
+    fOpen = linker.downcallHandle(
             stdlib.lookup("open").orElseThrow(() -> new NoSuchElementException("open")),
                     FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT)
             );
 
-    fOpenAt = LINKER.downcallHandle(
+    fOpenAt = linker.downcallHandle(
             stdlib.lookup("openat").orElseThrow(() -> new NoSuchElementException("openat")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT)
             );
 
-    fClose = LINKER.downcallHandle(
+    fClose = linker.downcallHandle(
             stdlib.lookup("close").orElseThrow(() -> new NoSuchElementException("close")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT)
             );
 
-    fNameToHandleAt = LINKER.downcallHandle(
+    fNameToHandleAt = linker.downcallHandle(
             stdlib.lookup("name_to_handle_at").orElseThrow(() -> new NoSuchElementException("name_to_handle_at")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, ADDRESS, ADDRESS, JAVA_INT)
             );
 
-    fOpenByHandleAt = LINKER.downcallHandle(
+    fOpenByHandleAt = linker.downcallHandle(
             stdlib.lookup("open_by_handle_at").orElseThrow(() -> new NoSuchElementException("open_by_handle_at")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT)
             );
 
-    fDataSync = LINKER.downcallHandle(
+    fDataSync = linker.downcallHandle(
             stdlib.lookup("fdatasync").orElseThrow(() -> new NoSuchElementException("fdatasync")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT)
             );
 
-    fSync = LINKER.downcallHandle(
+    fSync = linker.downcallHandle(
             stdlib.lookup("fsync").orElseThrow(() -> new NoSuchElementException("fsync")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT)
             );
 
-    fStatx = LINKER.downcallHandle(
+    fStatx = linker.downcallHandle(
             stdlib.lookup("statx").orElseThrow(() -> new NoSuchElementException("statx")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT, ADDRESS)
             );
 
-    fStatFs = LINKER.downcallHandle(
+    fStatFs = linker.downcallHandle(
             stdlib.lookup("fstatfs").orElseThrow(() -> new NoSuchElementException("fstatfs")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS)
             );
 
-    fUnlinkAt = LINKER.downcallHandle(
+    fUnlinkAt = linker.downcallHandle(
             stdlib.lookup("unlinkat").orElseThrow(() -> new NoSuchElementException("unlinkat")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT)
             );
 
-    fOpendir = LINKER.downcallHandle(
+    fOpendir = linker.downcallHandle(
             stdlib.lookup("fdopendir").orElseThrow(() -> new NoSuchElementException("fdopendir")),
                     FunctionDescriptor.of(ADDRESS, JAVA_INT)
             );
 
-    fReaddir = LINKER.downcallHandle(
+    fReaddir = linker.downcallHandle(
             stdlib.lookup("readdir").orElseThrow(() -> new NoSuchElementException("readdir")),
                     FunctionDescriptor.of(ADDRESS, ADDRESS)
             );
 
-    fSeekdir = LINKER.downcallHandle(
+    fSeekdir = linker.downcallHandle(
             stdlib.lookup("seekdir").orElseThrow(() -> new NoSuchElementException("seekdir")),
                     FunctionDescriptor.ofVoid(ADDRESS, JAVA_LONG)
             );
 
-    fPread = LINKER.downcallHandle(
+    fPread = linker.downcallHandle(
             stdlib.lookup("pread").orElseThrow(() -> new NoSuchElementException("pread")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, JAVA_LONG)
             );
 
-    fPwrite = LINKER.downcallHandle(
+    fPwrite = linker.downcallHandle(
             stdlib.lookup("pwrite").orElseThrow(() -> new NoSuchElementException("pwrite")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, JAVA_LONG)
     );
 
-    fSymlinkAt = LINKER.downcallHandle(
+    fSymlinkAt = linker.downcallHandle(
             stdlib.lookup("symlinkat").orElseThrow(() -> new NoSuchElementException("symlinkat")),
                     FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT, ADDRESS)
             );
 
-    fRenameAt = LINKER.downcallHandle(
+    fRenameAt = linker.downcallHandle(
             stdlib.lookup("renameat").orElseThrow(() -> new NoSuchElementException("renameat")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, ADDRESS)
             );
 
-    fReadlinkAt = LINKER.downcallHandle(
+    fReadlinkAt = linker.downcallHandle(
             stdlib.lookup("readlinkat").orElseThrow(() -> new NoSuchElementException("readlinkat")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, ADDRESS, JAVA_INT)
     );
 
-    fChownAt = LINKER.downcallHandle(
+    fChownAt = linker.downcallHandle(
             stdlib.lookup("fchownat").orElseThrow(() -> new NoSuchElementException("fchownat")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT, JAVA_INT)
     );
 
-    fMkdirAt = LINKER.downcallHandle(
+    fMkdirAt = linker.downcallHandle(
             stdlib.lookup("mkdirat").orElseThrow(() -> new NoSuchElementException("mkdirat")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT)
     );
 
-    fChmod = LINKER.downcallHandle(
+    fChmod = linker.downcallHandle(
             stdlib.lookup("fchmod").orElseThrow(() -> new NoSuchElementException("fchmod")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, JAVA_INT)
     );
 
-    fFtruncate = LINKER.downcallHandle(
+    fFtruncate = linker.downcallHandle(
             stdlib.lookup("ftruncate").orElseThrow(() -> new NoSuchElementException("ftruncate")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, JAVA_LONG)
     );
 
-    fLinkAt = LINKER.downcallHandle(
+    fLinkAt = linker.downcallHandle(
             stdlib.lookup("linkat").orElseThrow(() -> new NoSuchElementException("linkat")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, ADDRESS, JAVA_INT)
     );
 
-    fCopyFileRange = LINKER.downcallHandle(
+    fCopyFileRange = linker.downcallHandle(
             stdlib.lookup("copy_file_range").orElseThrow(() -> new NoSuchElementException("copy_file_range")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, ADDRESS, JAVA_LONG, JAVA_INT)
     );
 
-    fListxattr  = LINKER.downcallHandle(
+    fListxattr  = linker.downcallHandle(
             stdlib.lookup("flistxattr").orElseThrow(() -> new NoSuchElementException("flistxattr")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT)
     );
 
-    fGetxattr  = LINKER.downcallHandle(
+    fGetxattr  = linker.downcallHandle(
             stdlib.lookup("fgetxattr").orElseThrow(() -> new NoSuchElementException("fgetxattr")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, ADDRESS, JAVA_INT)
     );
 
-    fSetxattr  = LINKER.downcallHandle(
+    fSetxattr  = linker.downcallHandle(
             stdlib.lookup("fsetxattr").orElseThrow(() -> new NoSuchElementException("fsetxattr")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, ADDRESS, JAVA_INT, JAVA_INT)
     );
 
-    fRemovexattr  = LINKER.downcallHandle(
+    fRemovexattr  = linker.downcallHandle(
             stdlib.lookup("fremovexattr").orElseThrow(() -> new NoSuchElementException("fremovexattr")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS)
     );
 
-    fMknodeAt = LINKER.downcallHandle(
+    fMknodeAt = linker.downcallHandle(
             stdlib.lookup("__xmknodat").orElseThrow(() -> new NoSuchElementException("__xmknodat")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, ADDRESS)
     );
 
-    fIoctl  = LINKER.downcallHandle(
+    fIoctl  = linker.downcallHandle(
             stdlib.lookup("ioctl").orElseThrow(() -> new NoSuchElementException("ioctl")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, JAVA_INT, ADDRESS)
     );
