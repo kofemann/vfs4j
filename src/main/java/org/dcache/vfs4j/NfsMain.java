@@ -18,7 +18,7 @@ import javax.net.ssl.SSLParameters;
 import java.io.File;
 import java.util.concurrent.Callable;
 
-@CommandLine.Command(name = "nfs4j", mixinStandardHelpOptions = true, version = "0.0.1")
+@CommandLine.Command(name = "nfs4j", mixinStandardHelpOptions = true, version = "0.0.1", showDefaultValues = true)
 public class NfsMain implements Callable<Void> {
 
   @CommandLine.Option(
@@ -57,6 +57,22 @@ public class NfsMain implements Callable<Void> {
             defaultValue = "false")
     private boolean insecure;
 
+  @CommandLine.Option(
+          names = {"--with-v3"},
+          negatable = true,
+          description = "Enable NFS version 3",
+          showDefaultValue = CommandLine.Help.Visibility.ALWAYS,
+          defaultValue = "false")
+  private boolean withV3;
+
+  @CommandLine.Option(
+          names = {"--with-v4"},
+          negatable = true,
+          description = "Enable NFS version 4.1",
+          showDefaultValue = CommandLine.Help.Visibility.ALWAYS,
+          defaultValue = "true")
+  private boolean withV4;
+
   @CommandLine.Parameters(index = "0", description = "directory to export")
   private File dir;
 
@@ -64,7 +80,12 @@ public class NfsMain implements Callable<Void> {
   private File export;
 
   public static void main(String[] args) throws Exception {
-    new CommandLine(new NfsMain()).execute(args);
+    new CommandLine(new NfsMain()).setNegatableOptionTransformer(
+            new CommandLine.RegexTransformer.Builder()
+                    .addPattern("with", "without", "with[out]")
+                    .addPattern("^--with((?i)out)-(\\w(-|\\w)*)$", "--with-$2", "--with[$1-]$2")
+                    .build()
+    ).execute(args);
   }
 
   public Void call() throws Exception {
@@ -91,20 +112,23 @@ public class NfsMain implements Callable<Void> {
 
     ExportTable exportFile = new ExportFile(export);
 
-    NFSServerV41 nfs4 =
+    if (withV4) {
+      NFSServerV41 nfs4 =
         new NFSServerV41.Builder()
             .withExportTable(exportFile)
             .withVfs(vfs)
             .withOperationExecutor(new MDSOperationExecutor())
             .build();
+      nfsSvc.register(new OncRpcProgram(nfs4_prot.NFS4_PROGRAM, nfs4_prot.NFS_V4), nfs4);
+    }
 
-    NfsServerV3 nfs3 = new NfsServerV3(exportFile, vfs);
-    MountServer mountd = new MountServer(exportFile, vfs);
+    if (withV3) {
+      NfsServerV3 nfs3 = new NfsServerV3(exportFile, vfs);
+      MountServer mountd = new MountServer(exportFile, vfs);
+      nfsSvc.register(new OncRpcProgram(100003, 3), nfs3);
+      nfsSvc.register(new OncRpcProgram(100005, 3), mountd);
+    }
 
-    nfsSvc.register(new OncRpcProgram(100003, 3), nfs3);
-    nfsSvc.register(new OncRpcProgram(100005, 3), mountd);
-
-    nfsSvc.register(new OncRpcProgram(nfs4_prot.NFS4_PROGRAM, nfs4_prot.NFS_V4), nfs4);
     nfsSvc.start();
 
     Thread.currentThread().join();
