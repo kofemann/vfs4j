@@ -401,7 +401,7 @@ public class LocalVFS implements VirtualFileSystem {
 
   public LocalVFS(File root) throws IOException {
 
-    rootFd = open(root.getAbsolutePath(), O_DIRECTORY, O_RDONLY);
+    rootFd = open(root.getAbsolutePath());
     checkError(rootFd >= 0);
 
     rootFh = path2fh(rootFd, "", AT_EMPTY_PATH);
@@ -1260,12 +1260,12 @@ public class LocalVFS implements VirtualFileSystem {
     }
   }
 
-  private int open(String name, int flags, int mode) {
+  private int open(String name) {
     try(var scope = MemorySession.openConfined()){
       SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
 
       MemorySegment str = allocator.allocateUtf8String(name);
-      return (int)fOpen.invoke(str, flags, mode);
+      return (int)fOpen.invoke(str, O_DIRECTORY, O_RDONLY);
     } catch (Throwable t) {
       throw new RuntimeException(t);
     }
