@@ -19,8 +19,8 @@ import java.lang.foreign.MemorySegment;
 import java.lang.foreign.MemorySession;
 import java.lang.foreign.SegmentAllocator;
 import java.lang.foreign.SymbolLookup;
-import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.VarHandle;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
@@ -50,6 +50,7 @@ import org.dcache.nfs.vfs.VirtualFileSystem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static java.lang.foreign.MemoryLayout.PathElement.groupElement;
 import static java.lang.foreign.ValueLayout.*;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -133,7 +134,7 @@ public class LocalVFS implements VirtualFileSystem {
           JAVA_INT.withName("stx_nlink"), /* Object link count.	*/
           JAVA_INT.withName("stx_uid"), /* User ID of the file's owner. */
           JAVA_INT.withName("stx_gid"), /* Group ID of the file's owner.*/
-          ValueLayout.JAVA_SHORT.withName("stx_mode"), /* File type and mode.	*/
+          JAVA_SHORT.withName("stx_mode"), /* File type and mode.	*/
           MemoryLayout.paddingLayout(16), /* padding */
 
           JAVA_LONG.withName("stx_ino"), /* File inode number.	*/
@@ -173,7 +174,7 @@ public class LocalVFS implements VirtualFileSystem {
   private static final MemoryLayout STAT_FS_LAYOUT = MemoryLayout.structLayout(
           JAVA_LONG.withName("type"),
           JAVA_LONG.withName("bsize"),
-          JAVA_LONG.withName("block"),
+          JAVA_LONG.withName("blocks"),
           JAVA_LONG.withName("free"),
           JAVA_LONG.withName("bavail"),
 
@@ -186,13 +187,31 @@ public class LocalVFS implements VirtualFileSystem {
           MemoryLayout.sequenceLayout(6, JAVA_INT).withName("spare")
   );
 
+  private static final VarHandle VH_STATFS_TYPE = STAT_FS_LAYOUT.varHandle(groupElement("type"));
+  private static final VarHandle VH_STATFS_BSIZE = STAT_FS_LAYOUT.varHandle(groupElement("bsize"));
+  private static final VarHandle VH_STATFS_BLOCKS = STAT_FS_LAYOUT.varHandle(groupElement("blocks"));
+  private static final VarHandle VH_STATFS_FREE = STAT_FS_LAYOUT.varHandle(groupElement("free"));
+  private static final VarHandle VH_STATFS_BAVAIL = STAT_FS_LAYOUT.varHandle(groupElement("bavail"));
+  private static final VarHandle VH_STATFS_FILES = STAT_FS_LAYOUT.varHandle(groupElement("files"));
+  private static final VarHandle VH_STATFS_FFREE = STAT_FS_LAYOUT.varHandle(groupElement("ffree"));
+  private static final VarHandle VH_STATFS_FSID = STAT_FS_LAYOUT.varHandle(groupElement("fsid"));
+  private static final VarHandle VH_STATFS_NAMELEN = STAT_FS_LAYOUT.varHandle(groupElement("namelen"));
+  private static final VarHandle VH_STATFS_FRSIZE = STAT_FS_LAYOUT.varHandle(groupElement("frsize"));
+  private static final VarHandle VH_STATFS_FLAGS = STAT_FS_LAYOUT.varHandle(groupElement("flags"));
+
   private static final MemoryLayout DIRENT_LAYOUT = MemoryLayout.structLayout(
           JAVA_LONG.withName("ino"),
           JAVA_LONG.withName("off"),
-          ValueLayout.JAVA_SHORT.withName("reclen"),
-          ValueLayout.JAVA_BYTE.withName("type"),
-          MemoryLayout.sequenceLayout(MAX_NAME_LEN, ValueLayout.JAVA_BYTE).withName("name")
+          JAVA_SHORT.withName("reclen"),
+          JAVA_BYTE.withName("type"),
+          MemoryLayout.sequenceLayout(MAX_NAME_LEN, JAVA_BYTE).withName("name")
   );
+
+  private static final VarHandle VH_DIRENT_INO = DIRENT_LAYOUT.varHandle(groupElement("ino"));
+  private static final VarHandle VH_DIRENT_OFF = DIRENT_LAYOUT.varHandle(groupElement("off"));
+  private static final VarHandle VH_DIRENT_RECLEN = DIRENT_LAYOUT.varHandle(groupElement("reclen"));
+  private static final VarHandle VH_DIRENT_TYPE = DIRENT_LAYOUT.varHandle(groupElement("type"));
+  // private static final VarHandle VH_DIRENT_NAME = DIRENT_LAYOUT.varHandle(groupElement("name"), sequenceElement());
 
   // handles to native functions;
   private static final MethodHandle fStrerror;
@@ -483,24 +502,16 @@ public class LocalVFS implements VirtualFileSystem {
       int rc = (int)fStatFs.invoke(rootFd, rawStatFS);
       checkError(rc == 0);
 
-      ByteBuffer bb = rawStatFS.asByteBuffer().order(ByteOrder.nativeOrder());
-
-      long f_type = bb.getLong();
-      long  f_bsize = bb.getLong();
-      long f_blocks = bb.getLong();
-      long f_bfree = bb.getLong();
-      long f_bavail = bb.getLong();
-      long f_files = bb.getLong();
-      long f_ffree = bb.getLong();
-      long f_fsid = bb.getLong();
-      long f_namelen = bb.getLong();
-      long f_frsize = bb.getLong();
-      long f_flags = bb.getLong();
+      long  f_bsize = (long)VH_STATFS_BSIZE.get(rawStatFS);
+      long f_blocks = (long)VH_STATFS_BLOCKS.get(rawStatFS);
+      long f_free = (long)VH_STATFS_FREE.get(rawStatFS);
+      long f_files = (long)VH_STATFS_FILES.get(rawStatFS);
+      long f_ffree = (long)VH_STATFS_FFREE.get(rawStatFS);
 
       return new FsStat(
           f_blocks * f_bsize,
           f_files,
-          (f_blocks - f_bfree) * f_bsize,
+          (f_blocks - f_free) * f_bsize,
           f_files - f_ffree);
 
     } catch (Throwable t) {
@@ -572,13 +583,12 @@ public class LocalVFS implements VirtualFileSystem {
           break;
         }
 
-        long ino = dirent.get(JAVA_LONG, 0);
-        long off = dirent.get(JAVA_LONG, 8);
-        int reclen = dirent.get(JAVA_SHORT, 16);
-        byte type = dirent.get(JAVA_BYTE, 24);
+        MemorySegment segment = MemorySegment.ofAddress(dirent, DIRENT_LAYOUT.byteSize(), scope);
 
-        String name = dirent.getUtf8String(8+8+2+1);
+        long off = (long)VH_DIRENT_OFF.get(segment);
+        int reclen = (int)VH_DIRENT_RECLEN.get(segment);
 
+        String name = segment.asSlice(DIRENT_LAYOUT.byteOffset(groupElement("name")), reclen).getUtf8String(0);
         Inode fInode = lookup0(fd.fd(), name);
         Stat stat = getattr(fInode);
         list.add(new DirectoryEntry(name, fInode, stat, off));
