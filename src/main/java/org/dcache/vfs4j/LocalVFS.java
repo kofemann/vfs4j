@@ -92,10 +92,10 @@ public class LocalVFS implements VirtualFileSystem {
   private final NfsIdMapping idMapper = new SimpleIdMap();
 
   /** Cache of opened files used by read/write operations. */
-  private final LoadingCache<Inode, SystemFd> _openFilesCache;
+  private final LoadingCache<KernelFileHandle, SystemFd> _openFilesCache;
 
   /** Cache of directories for fast lookup. */
-  private final LoadingCache<Inode, SystemFd> _openDirCache;
+  private final LoadingCache<KernelFileHandle, SystemFd> _openDirCache;
 
   // as in bits/statx-generic.h
   private final static int STATX_TYPE = 0x0001;
@@ -456,7 +456,7 @@ public class LocalVFS implements VirtualFileSystem {
 
     try (var scope = MemorySession.openConfined()) {
 
-      SystemFd fd = _openDirCache.get(parent);
+      SystemFd fd = _openDirCache.get(new KernelFileHandle(parent));
 
       SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
       var emptyString = allocator.allocateUtf8String("");
@@ -469,9 +469,10 @@ public class LocalVFS implements VirtualFileSystem {
         rc = (int) fChownAt.invoke(rfd, emptyString, uid, gid, AT_EMPTY_PATH);
         checkError(rc == 0);
 
-        Inode inode = path2fh(rfd, "", AT_EMPTY_PATH).toInode();
-        _openFilesCache.put(inode, new SystemFd(rfd));
-        return inode;
+
+        KernelFileHandle handle = path2fh(rfd, "", AT_EMPTY_PATH);
+        _openFilesCache.put(handle, new SystemFd(rfd));
+        return handle.toInode();
 
       } else {
 
@@ -528,7 +529,7 @@ public class LocalVFS implements VirtualFileSystem {
   @Override
   public Inode lookup(Inode parent, String path) throws IOException {
     try {
-      SystemFd fd = _openDirCache.get(parent);
+      SystemFd fd = _openDirCache.get(new KernelFileHandle(parent));
       return lookup0(fd.fd(), path);
     } catch (ExecutionException e) {
       throw new IOException(e.getCause());
@@ -571,7 +572,7 @@ public class LocalVFS implements VirtualFileSystem {
     TreeSet<DirectoryEntry> list = new TreeSet<>();
     try (var scope = MemorySession.openConfined()) {
 
-      SystemFd fd = _openDirCache.get(inode);
+      SystemFd fd = _openDirCache.get(new KernelFileHandle(inode));
       MemoryAddress p = (MemoryAddress) fOpendir.invoke(fd.fd());
       checkError(p != MemoryAddress.NULL);
 
@@ -613,7 +614,7 @@ public class LocalVFS implements VirtualFileSystem {
     Inode inode;
     try (var scope = MemorySession.openConfined()) {
 
-      SystemFd fd = _openDirCache.get(parent);
+      SystemFd fd = _openDirCache.get(new KernelFileHandle(parent));
 
       SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
       var emptyString = allocator.allocateUtf8String("");
@@ -719,7 +720,7 @@ public class LocalVFS implements VirtualFileSystem {
   public void remove(Inode parent, String path) throws IOException {
     try (var scope = MemorySession.openConfined()) {
 
-      SystemFd fd = _openDirCache.get(parent);
+      SystemFd fd = _openDirCache.get(new KernelFileHandle(parent));
       SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
       var pathRaw = allocator.allocateUtf8String(path);
       Inode inode = lookup0(fd.fd(), path);
@@ -727,6 +728,11 @@ public class LocalVFS implements VirtualFileSystem {
       int flags = stat.type() == Stat.Type.DIRECTORY ? AT_REMOVEDIR : 0;
       int rc = (int)fUnlinkAt.invoke(fd.fd(), pathRaw, flags);
       checkError(rc == 0);
+      if (stat.type() == Stat.Type.DIRECTORY) {
+        _openDirCache.invalidate(new KernelFileHandle(inode));
+      } else {
+        _openFilesCache.invalidate(new KernelFileHandle(inode));
+      }
     } catch (Throwable t) {
       Throwables.throwIfInstanceOf(t, IOException.class);
       throw new RuntimeException(t);
@@ -741,7 +747,7 @@ public class LocalVFS implements VirtualFileSystem {
 
     try (var scope = MemorySession.openConfined()) {
 
-      SystemFd fd = _openDirCache.get(parent);
+      SystemFd fd = _openDirCache.get(new KernelFileHandle(parent));
 
       SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
       var emptyString = allocator.allocateUtf8String("");
@@ -1135,7 +1141,10 @@ public class LocalVFS implements VirtualFileSystem {
   }
 
   private SystemFd inode2fd(Inode inode, int flags) throws IOException {
-    KernelFileHandle fh = new KernelFileHandle(inode);
+    return inode2fd(new KernelFileHandle(inode), flags);
+  }
+
+  private SystemFd inode2fd(KernelFileHandle fh, int flags) throws IOException {
     byte[] fhBytes = fh.toBytes();
     try (var scope = MemorySession.openConfined()){
 
@@ -1213,33 +1222,33 @@ public class LocalVFS implements VirtualFileSystem {
     return vfsStat;
   }
 
-  private class FileCloser implements RemovalListener<Inode, SystemFd> {
+  private class FileCloser implements RemovalListener<KernelFileHandle, SystemFd> {
 
     @Override
-    public void onRemoval(RemovalNotification<Inode, SystemFd> notification) {
+    public void onRemoval(RemovalNotification<KernelFileHandle, SystemFd> notification) {
       close(notification.getValue().fd());
     }
   }
 
-  private class FileOpenner extends CacheLoader<Inode, SystemFd> {
+  private class FileOpenner extends CacheLoader<KernelFileHandle, SystemFd> {
 
     @Override
-    public SystemFd load(@Nonnull Inode key) throws Exception {
+    public SystemFd load(@Nonnull KernelFileHandle key) throws Exception {
       return inode2fd(key, O_NOFOLLOW | O_RDWR);
     }
   }
 
-  private class DirOpenner extends CacheLoader<Inode, SystemFd> {
+  private class DirOpenner extends CacheLoader<KernelFileHandle, SystemFd> {
 
     @Override
-    public SystemFd load(@Nonnull Inode key) throws Exception {
+    public SystemFd load(@Nonnull KernelFileHandle key) throws Exception {
       return inode2fd(key, O_NOFOLLOW | O_DIRECTORY);
     }
   }
 
   private SystemFd getOfLoadRawFd(Inode inode) throws IOException {
     try {
-      return _openFilesCache.get(inode);
+      return _openFilesCache.get(new KernelFileHandle(inode));
     } catch (ExecutionException e) {
       Throwable t = e.getCause();
       Throwables.throwIfInstanceOf(t, IOException.class);
@@ -1306,6 +1315,13 @@ public class LocalVFS implements VirtualFileSystem {
     public void close() throws IOException {
       int rc = LocalVFS.this.close(fd);
       checkError(rc == 0);
+    }
+
+    @Override
+    public String toString() {
+      return "SystemFd{" +
+              "fd=" + fd +
+              '}';
     }
   }
 

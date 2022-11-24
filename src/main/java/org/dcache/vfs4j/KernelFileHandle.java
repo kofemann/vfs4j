@@ -4,6 +4,8 @@ import com.google.common.io.BaseEncoding;
 
 import org.dcache.nfs.vfs.Inode;
 
+import java.util.Arrays;
+
 import static com.google.common.base.Preconditions.checkArgument;
 
 /** */
@@ -29,6 +31,19 @@ public class KernelFileHandle {
 
   Inode toInode() {
     return Inode.forFile(handleData);
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    KernelFileHandle that = (KernelFileHandle) o;
+    return Arrays.equals(handleData, that.handleData);
+  }
+
+  @Override
+  public int hashCode() {
+    return Arrays.hashCode(handleData);
   }
 
   @Override
