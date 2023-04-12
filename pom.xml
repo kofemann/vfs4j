@@ -9,7 +9,7 @@
     <url>https://github.com/kofemann/vfs4j</url>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <java.version>19</java.version>
+        <java.version>20</java.version>
         <version.picocli>4.6.3</version.picocli>
     </properties>
 
@@ -26,7 +26,7 @@
                      <!-- without forking compilation happens in the
                          same process, so no arguments are applied -->
                     <fork>true</fork>
-                    <executable>/usr/lib/jvm/java-19/bin/javac</executable>
+                    <executable>/usr/lib/jvm/java-20/bin/javac</executable>
                     <compilerArgs>
                         <arg>--enable-preview</arg>
                     </compilerArgs>

@@ -10,14 +10,12 @@ import com.google.common.cache.RemovalNotification;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
+import java.lang.foreign.Arena;
 import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.GroupLayout;
 import java.lang.foreign.Linker;
-import java.lang.foreign.MemoryAddress;
 import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
-import java.lang.foreign.MemorySession;
-import java.lang.foreign.SegmentAllocator;
 import java.lang.foreign.SymbolLookup;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.VarHandle;
@@ -248,173 +246,180 @@ public class LocalVFS implements VirtualFileSystem {
 
   private static final MethodHandle fErrono;
 
+  private static final MethodHandle fGetdents;
+
+  private static final Linker LINKER = Linker.nativeLinker();
+  private static final SymbolLookup STDLIB = LINKER.defaultLookup();
+
   static {
 
     // The Foreign Function & Memory API
     // https://bugs.openjdk.org/browse/JDK-8282048
 
-    Linker linker = Linker.nativeLinker();
-    SymbolLookup stdlib = linker.defaultLookup();
-
     // magic function that return pointer to errno variable
-    fErrono = linker.downcallHandle(
-            stdlib.lookup("__errno_location").orElseThrow(() -> new NoSuchElementException("__errno_location")),
-                    FunctionDescriptor.of(ADDRESS)
+    fErrono = LINKER.downcallHandle(
+            STDLIB.find("__errno_location").orElseThrow(() -> new NoSuchElementException("__errno_location")),
+                    FunctionDescriptor.of(ADDRESS.asUnbounded())
             );
 
-    fStrerror = linker.downcallHandle(
-            stdlib.lookup("strerror").orElseThrow(() -> new NoSuchElementException("strerror")),
-                    FunctionDescriptor.of(ADDRESS, JAVA_INT)
+    fStrerror = LINKER.downcallHandle(
+            STDLIB.find("strerror").orElseThrow(() -> new NoSuchElementException("strerror")),
+                    FunctionDescriptor.of(ADDRESS.asUnbounded(), JAVA_INT)
             );
 
-    fOpen = linker.downcallHandle(
-            stdlib.lookup("open").orElseThrow(() -> new NoSuchElementException("open")),
+    fOpen = LINKER.downcallHandle(
+            STDLIB.find("open").orElseThrow(() -> new NoSuchElementException("open")),
                     FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT)
             );
 
-    fOpenAt = linker.downcallHandle(
-            stdlib.lookup("openat").orElseThrow(() -> new NoSuchElementException("openat")),
+    fOpenAt = LINKER.downcallHandle(
+            STDLIB.find("openat").orElseThrow(() -> new NoSuchElementException("openat")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT)
             );
 
-    fClose = linker.downcallHandle(
-            stdlib.lookup("close").orElseThrow(() -> new NoSuchElementException("close")),
+    fClose = LINKER.downcallHandle(
+            STDLIB.find("close").orElseThrow(() -> new NoSuchElementException("close")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT)
             );
 
-    fNameToHandleAt = linker.downcallHandle(
-            stdlib.lookup("name_to_handle_at").orElseThrow(() -> new NoSuchElementException("name_to_handle_at")),
+    fNameToHandleAt = LINKER.downcallHandle(
+            STDLIB.find("name_to_handle_at").orElseThrow(() -> new NoSuchElementException("name_to_handle_at")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, ADDRESS, ADDRESS, JAVA_INT)
             );
 
-    fOpenByHandleAt = linker.downcallHandle(
-            stdlib.lookup("open_by_handle_at").orElseThrow(() -> new NoSuchElementException("open_by_handle_at")),
+    fOpenByHandleAt = LINKER.downcallHandle(
+            STDLIB.find("open_by_handle_at").orElseThrow(() -> new NoSuchElementException("open_by_handle_at")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT)
             );
 
-    fDataSync = linker.downcallHandle(
-            stdlib.lookup("fdatasync").orElseThrow(() -> new NoSuchElementException("fdatasync")),
+    fDataSync = LINKER.downcallHandle(
+            STDLIB.find("fdatasync").orElseThrow(() -> new NoSuchElementException("fdatasync")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT)
             );
 
-    fSync = linker.downcallHandle(
-            stdlib.lookup("fsync").orElseThrow(() -> new NoSuchElementException("fsync")),
+    fSync = LINKER.downcallHandle(
+            STDLIB.find("fsync").orElseThrow(() -> new NoSuchElementException("fsync")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT)
             );
 
-    fStatx = linker.downcallHandle(
-            stdlib.lookup("statx").orElseThrow(() -> new NoSuchElementException("statx")),
+    fStatx = LINKER.downcallHandle(
+            STDLIB.find("statx").orElseThrow(() -> new NoSuchElementException("statx")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT, ADDRESS)
             );
 
-    fStatFs = linker.downcallHandle(
-            stdlib.lookup("fstatfs").orElseThrow(() -> new NoSuchElementException("fstatfs")),
+    fStatFs = LINKER.downcallHandle(
+            STDLIB.find("fstatfs").orElseThrow(() -> new NoSuchElementException("fstatfs")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS)
             );
 
-    fUnlinkAt = linker.downcallHandle(
-            stdlib.lookup("unlinkat").orElseThrow(() -> new NoSuchElementException("unlinkat")),
+    fUnlinkAt = LINKER.downcallHandle(
+            STDLIB.find("unlinkat").orElseThrow(() -> new NoSuchElementException("unlinkat")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT)
             );
 
-    fOpendir = linker.downcallHandle(
-            stdlib.lookup("fdopendir").orElseThrow(() -> new NoSuchElementException("fdopendir")),
+    fOpendir = LINKER.downcallHandle(
+            STDLIB.find("fdopendir").orElseThrow(() -> new NoSuchElementException("fdopendir")),
                     FunctionDescriptor.of(ADDRESS, JAVA_INT)
             );
 
-    fReaddir = linker.downcallHandle(
-            stdlib.lookup("readdir").orElseThrow(() -> new NoSuchElementException("readdir")),
+    fReaddir = LINKER.downcallHandle(
+            STDLIB.find("readdir").orElseThrow(() -> new NoSuchElementException("readdir")),
                     FunctionDescriptor.of(ADDRESS, ADDRESS)
             );
 
-    fSeekdir = linker.downcallHandle(
-            stdlib.lookup("seekdir").orElseThrow(() -> new NoSuchElementException("seekdir")),
+    fSeekdir = LINKER.downcallHandle(
+            STDLIB.find("seekdir").orElseThrow(() -> new NoSuchElementException("seekdir")),
                     FunctionDescriptor.ofVoid(ADDRESS, JAVA_LONG)
             );
 
-    fPread = linker.downcallHandle(
-            stdlib.lookup("pread").orElseThrow(() -> new NoSuchElementException("pread")),
+    fPread = LINKER.downcallHandle(
+            STDLIB.find("pread").orElseThrow(() -> new NoSuchElementException("pread")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, JAVA_LONG)
             );
 
-    fPwrite = linker.downcallHandle(
-            stdlib.lookup("pwrite").orElseThrow(() -> new NoSuchElementException("pwrite")),
+    fPwrite = LINKER.downcallHandle(
+            STDLIB.find("pwrite").orElseThrow(() -> new NoSuchElementException("pwrite")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, JAVA_LONG)
     );
 
-    fSymlinkAt = linker.downcallHandle(
-            stdlib.lookup("symlinkat").orElseThrow(() -> new NoSuchElementException("symlinkat")),
+    fSymlinkAt = LINKER.downcallHandle(
+            STDLIB.find("symlinkat").orElseThrow(() -> new NoSuchElementException("symlinkat")),
                     FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT, ADDRESS)
             );
 
-    fRenameAt = linker.downcallHandle(
-            stdlib.lookup("renameat").orElseThrow(() -> new NoSuchElementException("renameat")),
+    fRenameAt = LINKER.downcallHandle(
+            STDLIB.find("renameat").orElseThrow(() -> new NoSuchElementException("renameat")),
                     FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, ADDRESS)
             );
 
-    fReadlinkAt = linker.downcallHandle(
-            stdlib.lookup("readlinkat").orElseThrow(() -> new NoSuchElementException("readlinkat")),
+    fReadlinkAt = LINKER.downcallHandle(
+            STDLIB.find("readlinkat").orElseThrow(() -> new NoSuchElementException("readlinkat")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, ADDRESS, JAVA_INT)
     );
 
-    fChownAt = linker.downcallHandle(
-            stdlib.lookup("fchownat").orElseThrow(() -> new NoSuchElementException("fchownat")),
+    fChownAt = LINKER.downcallHandle(
+            STDLIB.find("fchownat").orElseThrow(() -> new NoSuchElementException("fchownat")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT, JAVA_INT)
     );
 
-    fMkdirAt = linker.downcallHandle(
-            stdlib.lookup("mkdirat").orElseThrow(() -> new NoSuchElementException("mkdirat")),
+    fMkdirAt = LINKER.downcallHandle(
+            STDLIB.find("mkdirat").orElseThrow(() -> new NoSuchElementException("mkdirat")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT)
     );
 
-    fChmod = linker.downcallHandle(
-            stdlib.lookup("fchmod").orElseThrow(() -> new NoSuchElementException("fchmod")),
+    fChmod = LINKER.downcallHandle(
+            STDLIB.find("fchmod").orElseThrow(() -> new NoSuchElementException("fchmod")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, JAVA_INT)
     );
 
-    fFtruncate = linker.downcallHandle(
-            stdlib.lookup("ftruncate").orElseThrow(() -> new NoSuchElementException("ftruncate")),
+    fFtruncate = LINKER.downcallHandle(
+            STDLIB.find("ftruncate").orElseThrow(() -> new NoSuchElementException("ftruncate")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, JAVA_LONG)
     );
 
-    fLinkAt = linker.downcallHandle(
-            stdlib.lookup("linkat").orElseThrow(() -> new NoSuchElementException("linkat")),
+    fLinkAt = LINKER.downcallHandle(
+            STDLIB.find("linkat").orElseThrow(() -> new NoSuchElementException("linkat")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, ADDRESS, JAVA_INT)
     );
 
-    fCopyFileRange = linker.downcallHandle(
-            stdlib.lookup("copy_file_range").orElseThrow(() -> new NoSuchElementException("copy_file_range")),
+    fCopyFileRange = LINKER.downcallHandle(
+            STDLIB.find("copy_file_range").orElseThrow(() -> new NoSuchElementException("copy_file_range")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, ADDRESS, JAVA_LONG, JAVA_INT)
     );
 
-    fListxattr  = linker.downcallHandle(
-            stdlib.lookup("flistxattr").orElseThrow(() -> new NoSuchElementException("flistxattr")),
+    fListxattr  = LINKER.downcallHandle(
+            STDLIB.find("flistxattr").orElseThrow(() -> new NoSuchElementException("flistxattr")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT)
     );
 
-    fGetxattr  = linker.downcallHandle(
-            stdlib.lookup("fgetxattr").orElseThrow(() -> new NoSuchElementException("fgetxattr")),
+    fGetxattr  = LINKER.downcallHandle(
+            STDLIB.find("fgetxattr").orElseThrow(() -> new NoSuchElementException("fgetxattr")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, ADDRESS, JAVA_INT)
     );
 
-    fSetxattr  = linker.downcallHandle(
-            stdlib.lookup("fsetxattr").orElseThrow(() -> new NoSuchElementException("fsetxattr")),
+    fSetxattr  = LINKER.downcallHandle(
+            STDLIB.find("fsetxattr").orElseThrow(() -> new NoSuchElementException("fsetxattr")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, ADDRESS, JAVA_INT, JAVA_INT)
     );
 
-    fRemovexattr  = linker.downcallHandle(
-            stdlib.lookup("fremovexattr").orElseThrow(() -> new NoSuchElementException("fremovexattr")),
+    fRemovexattr  = LINKER.downcallHandle(
+            STDLIB.find("fremovexattr").orElseThrow(() -> new NoSuchElementException("fremovexattr")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS)
     );
 
-    fMknodeAt = linker.downcallHandle(
-            stdlib.lookup("__xmknodat").orElseThrow(() -> new NoSuchElementException("__xmknodat")),
+    fMknodeAt = LINKER.downcallHandle(
+            STDLIB.find("__xmknodat").orElseThrow(() -> new NoSuchElementException("__xmknodat")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, ADDRESS)
     );
 
-    fIoctl  = linker.downcallHandle(
-            stdlib.lookup("ioctl").orElseThrow(() -> new NoSuchElementException("ioctl")),
+    fIoctl  = LINKER.downcallHandle(
+            STDLIB.find("ioctl").orElseThrow(() -> new NoSuchElementException("ioctl")),
             FunctionDescriptor.of(JAVA_INT, JAVA_INT, JAVA_INT, ADDRESS)
+    );
+
+    fGetdents  = LINKER.downcallHandle(
+            STDLIB.find("getdents64").orElseThrow(() -> new NoSuchElementException("getdents64")),
+            FunctionDescriptor.of(JAVA_LONG, JAVA_INT, ADDRESS, JAVA_LONG)
     );
   }
 
@@ -454,19 +459,18 @@ public class LocalVFS implements VirtualFileSystem {
       throw new NotSuppException("create of this type not supported");
     }
 
-    try (var scope = MemorySession.openConfined()) {
+    try (var arena = Arena.openConfined()) {
 
       SystemFd fd = _openDirCache.get(new KernelFileHandle(parent));
 
-      SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
-      var emptyString = allocator.allocateUtf8String("");
-      var pathRaw = allocator.allocateUtf8String(path);
+      var emptyString = arena.allocateUtf8String("");
+      var pathRaw = arena.allocateUtf8String(path);
 
       int rc;
       if (type == Stat.Type.REGULAR) {
-        int rfd =  (int)fOpenAt.invoke(fd.fd(), pathRaw, O_EXCL | O_CREAT | O_RDWR, mode);
+        int rfd =  (int)fOpenAt.invokeExact(fd.fd(), pathRaw, O_EXCL | O_CREAT | O_RDWR, mode);
         checkError(rfd >= 0);
-        rc = (int) fChownAt.invoke(rfd, emptyString, uid, gid, AT_EMPTY_PATH);
+        rc = (int) fChownAt.invokeExact(rfd, emptyString, uid, gid, AT_EMPTY_PATH);
         checkError(rc == 0);
 
 
@@ -478,13 +482,13 @@ public class LocalVFS implements VirtualFileSystem {
 
         // FIXME: we should get major and minor numbers from CREATE arguments.
         // dev == (long)major << 32 | minor
-        var ms = MemorySegment.allocateNative(Long.BYTES, scope);
+        var ms = arena.allocate(Long.BYTES);
         var dev = ms.asByteBuffer();
         dev.putLong(0, type == Stat.Type.BLOCK || type == Stat.Type.CHAR ? 1 : 0);
 
-        rc = (int)fMknodeAt.invoke(0, fd.fd(), pathRaw,  mode | type.toMode(), ms);
+        rc = (int)fMknodeAt.invokeExact(0, fd.fd(), pathRaw,  mode | type.toMode(), ms);
         checkError(rc >= 0);
-        rc = (int) fChownAt.invoke(fd.fd(), pathRaw, uid, gid, 0);
+        rc = (int) fChownAt.invokeExact(fd.fd(), pathRaw, uid, gid, 0);
         checkError(rc >= 0);
         return lookup0(fd.fd(), path);
       }
@@ -497,10 +501,10 @@ public class LocalVFS implements VirtualFileSystem {
   @Override
   public FsStat getFsStat() throws IOException {
 
-    try(var scope = MemorySession.openConfined()) {
+    try(var arena = Arena.openConfined()) {
 
-      MemorySegment rawStatFS = MemorySegment.allocateNative(STAT_FS_LAYOUT, scope);
-      int rc = (int)fStatFs.invoke(rootFd, rawStatFS);
+      MemorySegment rawStatFS = arena.allocate(STAT_FS_LAYOUT);
+      int rc = (int)fStatFs.invokeExact(rootFd, rawStatFS);
       checkError(rc == 0);
 
       long  f_bsize = (long)VH_STATFS_BSIZE.get(rawStatFS);
@@ -550,13 +554,12 @@ public class LocalVFS implements VirtualFileSystem {
   @Override
   public Inode link(Inode parent, Inode link, String path, Subject subject) throws IOException {
     try (SystemFd dirFd = inode2fd(parent, O_NOFOLLOW | O_DIRECTORY);
-         SystemFd inodeFd = inode2fd(link, O_NOFOLLOW); var scope = MemorySession.openConfined()) {
+         SystemFd inodeFd = inode2fd(link, O_NOFOLLOW); var arena = Arena.openConfined()) {
 
-      SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
-      var emptyString = allocator.allocateUtf8String("");
-      var pathRaw = allocator.allocateUtf8String(path);
+      var emptyString = arena.allocateUtf8String("");
+      var pathRaw = arena.allocateUtf8String(path);
 
-      int rc = (int) fLinkAt.invoke(inodeFd.fd(), emptyString, dirFd.fd(), pathRaw, AT_EMPTY_PATH);
+      int rc = (int) fLinkAt.invokeExact(inodeFd.fd(), emptyString, dirFd.fd(), pathRaw, AT_EMPTY_PATH);
 
       checkError(rc == 0);
       return lookup0(dirFd.fd(), path);
@@ -570,26 +573,65 @@ public class LocalVFS implements VirtualFileSystem {
   public DirectoryStream list(Inode inode, byte[] verifier, long cookie) throws IOException {
 
     TreeSet<DirectoryEntry> list = new TreeSet<>();
-    try (var scope = MemorySession.openConfined()) {
+    try (var arena = Arena.openConfined()) {
 
       SystemFd fd = _openDirCache.get(new KernelFileHandle(inode));
-      MemoryAddress p = (MemoryAddress) fOpendir.invoke(fd.fd());
-      checkError(p != MemoryAddress.NULL);
 
-      fSeekdir.invoke(p, cookie);
+      MemorySegment dirents = arena.allocate(DIRENT_LAYOUT.byteSize()*8192);
 
       while (true) {
-        MemoryAddress dirent = (MemoryAddress) fReaddir.invoke(p);
-        if (dirent == MemoryAddress.NULL) {
+        long n = (long) fGetdents.invokeExact(fd.fd(), dirents, DIRENT_LAYOUT.byteSize());
+        checkError(n >= 0);
+        if ( n == 0) {
           break;
         }
 
-        MemorySegment segment = MemorySegment.ofAddress(dirent, DIRENT_LAYOUT.byteSize(), scope);
+        long offiset = 0L;
+        while(n > 0) {
+          MemorySegment dirent = dirents.asSlice(offiset);
+          long off = (long)VH_DIRENT_OFF.get(dirent);
+          int reclen = (int)VH_DIRENT_RECLEN.get(dirent);
 
-        long off = (long)VH_DIRENT_OFF.get(segment);
-        int reclen = (int)VH_DIRENT_RECLEN.get(segment);
+          if (off > cookie) {
+            String name = dirent.asSlice(DIRENT_LAYOUT.byteOffset(groupElement("name")), reclen).getUtf8String(0);
+            Inode fInode = lookup0(fd.fd(), name);
+            Stat stat = getattr(fInode);
+            list.add(new DirectoryEntry(name, fInode, stat, off));
+          }
+          offiset += reclen;
+          n -= reclen;
+        }
+      }
+      return new DirectoryStream(DirectoryStream.ZERO_VERIFIER, list);
+    } catch (Throwable t) {
+      Throwables.throwIfInstanceOf(t, IOException.class);
+      throw new RuntimeException(t);
+    }
+  }
 
-        String name = segment.asSlice(DIRENT_LAYOUT.byteOffset(groupElement("name")), reclen).getUtf8String(0);
+  //@Override
+  // REVISIT: this version doesn't work as expected
+  public DirectoryStream list_dead(Inode inode, byte[] verifier, long cookie) throws IOException {
+
+    TreeSet<DirectoryEntry> list = new TreeSet<>();
+    try (var arena = Arena.openConfined()) {
+
+      SystemFd fd = _openDirCache.get(new KernelFileHandle(inode));
+      MemorySegment p = (MemorySegment) fOpendir.invokeExact(fd.fd());
+      checkError(p != MemorySegment.NULL);
+
+      fSeekdir.invokeExact(p, cookie);
+
+      while (true) {
+        MemorySegment dirent = (MemorySegment) fReaddir.invokeExact(p);
+        if (dirent == MemorySegment.NULL) {
+          break;
+        }
+
+        long off = (long)VH_DIRENT_OFF.get(dirent);
+        int reclen = (int)VH_DIRENT_RECLEN.get(dirent);
+
+        String name = dirent.asSlice(DIRENT_LAYOUT.byteOffset(groupElement("name")), reclen).getUtf8String(0);
         Inode fInode = lookup0(fd.fd(), name);
         Stat stat = getattr(fInode);
         list.add(new DirectoryEntry(name, fInode, stat, off));
@@ -600,7 +642,6 @@ public class LocalVFS implements VirtualFileSystem {
       throw new RuntimeException(t);
     }
   }
-
   @Override
   public byte[] directoryVerifier(Inode inode) throws IOException {
     return DirectoryStream.ZERO_VERIFIER;
@@ -612,19 +653,18 @@ public class LocalVFS implements VirtualFileSystem {
     int gid = (int) UnixSubjects.getPrimaryGid(subject);
 
     Inode inode;
-    try (var scope = MemorySession.openConfined()) {
+    try (var arena = Arena.openConfined()) {
 
       SystemFd fd = _openDirCache.get(new KernelFileHandle(parent));
 
-      SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
-      var emptyString = allocator.allocateUtf8String("");
-      var pathRaw = allocator.allocateUtf8String(path);
+      var emptyString = arena.allocateUtf8String("");
+      var pathRaw = arena.allocateUtf8String(path);
 
-      int rc = (int) fMkdirAt.invoke(fd.fd(), pathRaw, mode);
+      int rc = (int) fMkdirAt.invokeExact(fd.fd(), pathRaw, mode);
       checkError(rc == 0);
       inode = lookup0(fd.fd(), path);
       try (SystemFd fd1 = inode2fd(inode, O_NOFOLLOW | O_DIRECTORY)) {
-        rc = (int) fChownAt.invoke(fd1.fd(), emptyString, uid, gid, AT_EMPTY_PATH);
+        rc = (int) fChownAt.invokeExact(fd1.fd(), emptyString, uid, gid, AT_EMPTY_PATH);
         checkError(rc == 0);
         return inode;
       }
@@ -638,13 +678,12 @@ public class LocalVFS implements VirtualFileSystem {
   public boolean move(Inode src, String oldName, Inode dest, String newName) throws IOException {
     try (SystemFd fd1 = inode2fd(src, O_PATH | O_NOACCESS );
          SystemFd fd2 = inode2fd(dest, O_PATH | O_NOACCESS);
-         var scope = MemorySession.openConfined()) {
+         var arena = Arena.openConfined()) {
 
-      SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
-      MemorySegment newNameRaw = allocator.allocateUtf8String(newName);
-      MemorySegment oldNameRaw = allocator.allocateUtf8String(oldName);
+      MemorySegment newNameRaw = arena.allocateUtf8String(newName);
+      MemorySegment oldNameRaw = arena.allocateUtf8String(oldName);
 
-        int rc = (int) fRenameAt.invoke(fd1.fd(), oldNameRaw, fd2.fd(), newNameRaw);
+        int rc = (int) fRenameAt.invokeExact(fd1.fd(), oldNameRaw, fd2.fd(), newNameRaw);
         checkError(rc == 0);
         return true;
       } catch (Throwable t) {
@@ -677,10 +716,10 @@ public class LocalVFS implements VirtualFileSystem {
       bb.clear().limit(data.remaining());
     }
 
-    try (var scope = MemorySession.openConfined()) {
+    try (var arena = Arena.openConfined()) {
         MemorySegment rawData = MemorySegment.ofBuffer(bb);
 
-        int n = (int)fPread.invoke(fd.fd(), rawData, data.remaining(), offset);
+        int n = (int)fPread.invokeExact(fd.fd(), rawData, data.remaining(), offset);
         checkError(n >=0);
         // JNI interface does not updates the position
         bb.position(data.position() + n);
@@ -698,14 +737,13 @@ public class LocalVFS implements VirtualFileSystem {
   @Override
   public String readlink(Inode inode) throws IOException {
     try (SystemFd fd = inode2fd(inode, O_PATH | O_NOFOLLOW);
-        var scope = MemorySession.openConfined()) {
+        var arena = Arena.openConfined()) {
 
-      SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
-      var emptyString = allocator.allocateUtf8String("");
+      var emptyString = arena.allocateUtf8String("");
 
-      var link = MemorySegment.allocateNative(MAX_NAME_LEN, scope); // max path name length
+      var link = arena.allocate(MAX_NAME_LEN); // max path name length
 
-      int rc = (int) fReadlinkAt.invoke(fd.fd(), emptyString, link, (int)link.byteSize());
+      int rc = (int) fReadlinkAt.invokeExact(fd.fd(), emptyString, link, (int)link.byteSize());
       checkError(rc >= 0);
 
       return link.getUtf8String(0);
@@ -718,15 +756,14 @@ public class LocalVFS implements VirtualFileSystem {
 
   @Override
   public void remove(Inode parent, String path) throws IOException {
-    try (var scope = MemorySession.openConfined()) {
+    try (var arena = Arena.openConfined()) {
 
       SystemFd fd = _openDirCache.get(new KernelFileHandle(parent));
-      SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
-      var pathRaw = allocator.allocateUtf8String(path);
+      var pathRaw = arena.allocateUtf8String(path);
       Inode inode = lookup0(fd.fd(), path);
       Stat stat = getattr(inode);
       int flags = stat.type() == Stat.Type.DIRECTORY ? AT_REMOVEDIR : 0;
-      int rc = (int)fUnlinkAt.invoke(fd.fd(), pathRaw, flags);
+      int rc = (int)fUnlinkAt.invokeExact(fd.fd(), pathRaw, flags);
       checkError(rc == 0);
       if (stat.type() == Stat.Type.DIRECTORY) {
         _openDirCache.invalidate(new KernelFileHandle(inode));
@@ -745,23 +782,22 @@ public class LocalVFS implements VirtualFileSystem {
     int uid = (int) UnixSubjects.getUid(subject);
     int gid = (int) UnixSubjects.getPrimaryGid(subject);
 
-    try (var scope = MemorySession.openConfined()) {
+    try (var arena = Arena.openConfined()) {
 
       SystemFd fd = _openDirCache.get(new KernelFileHandle(parent));
 
-      SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
-      var emptyString = allocator.allocateUtf8String("");
-      var pathRaw = allocator.allocateUtf8String(path);
-      var linkRaw = allocator.allocateUtf8String(link);
+      var emptyString = arena.allocateUtf8String("");
+      var pathRaw = arena.allocateUtf8String(path);
+      var linkRaw = arena.allocateUtf8String(link);
 
-      int rc = (int) fSymlinkAt.invoke(linkRaw, fd.fd(), pathRaw);
+      int rc = (int) fSymlinkAt.invokeExact(linkRaw, fd.fd(), pathRaw);
       checkError(rc == 0);
       Inode inode = lookup0(fd.fd(), path);
       Stat stat = new Stat();
       stat.setUid(uid);
       stat.setGid(gid);
       try (SystemFd fd1 = inode2fd(inode, O_PATH)) {
-        rc = (int) fChownAt.invoke(fd1.fd(), emptyString, uid, gid, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW);
+        rc = (int) fChownAt.invokeExact(fd1.fd(), emptyString, uid, gid, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW);
         checkError(rc == 0);
       }
       return inode;
@@ -791,7 +827,7 @@ public class LocalVFS implements VirtualFileSystem {
 
     try {
       MemorySegment dataRaw = MemorySegment.ofBuffer(bb);
-      int n = (int)fPwrite.invoke(fd.fd(), dataRaw, bb.remaining(), offset);
+      int n = (int)fPwrite.invokeExact(fd.fd(), dataRaw, bb.remaining(), offset);
       checkError(n >= 0);
 
       // JNI interface does not updates the position
@@ -850,10 +886,9 @@ public class LocalVFS implements VirtualFileSystem {
       openMode |= O_RDWR;
     }
 
-    try (SystemFd fd = inode2fd(inode, openMode); var scope = MemorySession.openConfined()) {
+    try (SystemFd fd = inode2fd(inode, openMode); var arena = Arena.openConfined()) {
 
-      SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
-      var emptyString = allocator.allocateUtf8String("");
+      var emptyString = arena.allocateUtf8String("");
 
       int uid = -1;
       int gid = -1;
@@ -868,19 +903,19 @@ public class LocalVFS implements VirtualFileSystem {
       }
 
       if (uid != -1 || gid != -1) {
-        rc = (int) fChownAt.invoke(fd.fd(), emptyString, uid, gid, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW);
+        rc = (int) fChownAt.invokeExact(fd.fd(), emptyString, uid, gid, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW);
         checkError(rc == 0);
       }
 
       if (currentStat.type() != Stat.Type.SYMLINK) {
         if (stat.isDefined(Stat.StatAttribute.MODE)) {
-          rc = (int)fChmod.invoke(fd.fd(), stat.getMode());
+          rc = (int)fChmod.invokeExact(fd.fd(), stat.getMode());
           checkError(rc == 0);
         }
       }
 
       if (stat.isDefined(Stat.StatAttribute.SIZE)) {
-        rc = (int)fFtruncate.invoke(fd.fd(), stat.getSize());
+        rc = (int)fFtruncate.invokeExact(fd.fd(), stat.getSize());
         checkError(rc == 0);
       }
     } catch (Throwable t) {
@@ -944,10 +979,10 @@ public class LocalVFS implements VirtualFileSystem {
   @Override
   public String[] listXattrs(Inode inode) throws IOException {
 
-    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var scope = MemorySession.openConfined()) {
+    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var arena = Arena.openConfined()) {
 
-      var out = MemorySegment.allocateNative(1024, scope);
-      int rc = (int)fListxattr.invoke(fd.fd(), out, (int)out.byteSize());
+      var out = arena.allocate(1024);
+      int rc = (int)fListxattr.invokeExact(fd.fd(), out, (int)out.byteSize());
       checkError(rc >= 0);
 
       byte[] listRaw = out.toArray(JAVA_BYTE);
@@ -970,13 +1005,11 @@ public class LocalVFS implements VirtualFileSystem {
   @Override
   public byte[] getXattr(Inode inode, String name) throws IOException {
 
-    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var scope = MemorySession.openConfined()) {
+    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var arena = Arena.openConfined()) {
 
-      SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
-
-      var attrName = allocator.allocateUtf8String(toXattrName(name));
-      var out = MemorySegment.allocateNative(64*1024, scope);
-      int rc = (int)fGetxattr.invoke(fd.fd(), attrName, out, (int)out.byteSize());
+      var attrName = arena.allocateUtf8String(toXattrName(name));
+      var out = arena.allocate(64*1024);
+      int rc = (int)fGetxattr.invokeExact(fd.fd(), attrName, out, (int)out.byteSize());
       checkError(rc >= 0);
       return out.asSlice(0, rc).toArray(JAVA_BYTE);
     } catch (Throwable t) {
@@ -998,12 +1031,11 @@ public class LocalVFS implements VirtualFileSystem {
     var data = ByteBuffer.allocateDirect(value.length);
     data.put(value);
 
-    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var scope = MemorySession.openConfined()) {
-      SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
+    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var arena = Arena.openConfined()) {
 
-      var attrName = allocator.allocateUtf8String(toXattrName(attr));
+      var attrName = arena.allocateUtf8String(toXattrName(attr));
       var dataRaw = MemorySegment.ofBuffer(data);
-      int rc = (int)fSetxattr.invoke(fd.fd(), attrName, dataRaw, value.length, flag);
+      int rc = (int)fSetxattr.invokeExact(fd.fd(), attrName, dataRaw, value.length, flag);
       checkError(rc == 0);
     } catch (Throwable t) {
       Throwables.throwIfInstanceOf(t, IOException.class);
@@ -1013,10 +1045,9 @@ public class LocalVFS implements VirtualFileSystem {
 
   @Override
   public void removeXattr(Inode inode, String attr) throws IOException {
-    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var scope = MemorySession.openConfined()) {
-      SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
-      var attrName = allocator.allocateUtf8String(toXattrName(attr));
-      int rc = (int)fRemovexattr.invoke(fd.fd(), attrName);
+    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var arena = Arena.openConfined()) {
+      var attrName = arena.allocateUtf8String(toXattrName(attr));
+      int rc = (int)fRemovexattr.invokeExact(fd.fd(), attrName);
       checkError(rc == 0);
     } catch (Throwable t) {
       Throwables.throwIfInstanceOf(t, IOException.class);
@@ -1039,15 +1070,15 @@ public class LocalVFS implements VirtualFileSystem {
 
     return CompletableFuture.supplyAsync(
             () -> {
-              try (var scope = MemorySession.openConfined()) {
+              try (var arena = Arena.openConfined()) {
 
-                var srcPosRef = MemorySegment.allocateNative(Long.BYTES, scope);
-                var dstPosRef = MemorySegment.allocateNative(Long.BYTES, scope);
+                var srcPosRef = arena.allocate(Long.BYTES);
+                var dstPosRef = arena.allocate(Long.BYTES);
 
                 srcPosRef.asByteBuffer().order(ByteOrder.nativeOrder()).putLong(0, srcPos);
                 dstPosRef.asByteBuffer().order(ByteOrder.nativeOrder()).putLong(0, dstPos);
 
-                return (int)fCopyFileRange.invoke(
+                return (int)fCopyFileRange.invokeExact(
                         fdIn.fd(), srcPosRef,
                 fdDst.fd(), dstPosRef, len, 0);
               } catch (Throwable e) {
@@ -1076,18 +1107,16 @@ public class LocalVFS implements VirtualFileSystem {
    */
   private KernelFileHandle path2fh(int fd, String path, int flags) throws IOException {
 
-    try(var scope = MemorySession.openConfined()){
+    try(var arena = Arena.openConfined()){
 
-      SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
-
-      MemorySegment str = allocator.allocateUtf8String(path);
-      MemorySegment bytes = MemorySegment.allocateNative(KernelFileHandle.MAX_HANDLE_SZ, scope);
-      MemorySegment mntId = MemorySegment.allocateNative(Integer.BYTES, scope);
+      MemorySegment str = arena.allocateUtf8String(path);
+      MemorySegment bytes = arena.allocate(KernelFileHandle.MAX_HANDLE_SZ);
+      MemorySegment mntId = arena.allocate(Integer.BYTES);
 
       ByteBuffer asByteBuffer = bytes.asByteBuffer().order(ByteOrder.nativeOrder());
       asByteBuffer.putInt(0, (int)bytes.byteSize());
 
-      int rc = (int)fNameToHandleAt.invoke(fd, str, bytes, mntId, flags);
+      int rc = (int)fNameToHandleAt.invokeExact(fd, str, bytes, mntId, flags);
       checkError(rc == 0);
 
       int handleSize = bytes.get(JAVA_INT, 0) + 8; // handle size and type 4+4
@@ -1146,11 +1175,11 @@ public class LocalVFS implements VirtualFileSystem {
 
   private SystemFd inode2fd(KernelFileHandle fh, int flags) throws IOException {
     byte[] fhBytes = fh.toBytes();
-    try (var scope = MemorySession.openConfined()){
+    try (var arena = Arena.openConfined()){
 
-      MemorySegment rawHandle = MemorySegment.allocateNative(fhBytes.length, scope);
+      MemorySegment rawHandle = arena.allocate(fhBytes.length);
       rawHandle.asByteBuffer().put(fhBytes);
-      int fd = (int) fOpenByHandleAt.invoke(rootFd, rawHandle, flags);
+      int fd = (int) fOpenByHandleAt.invokeExact(rootFd, rawHandle, flags);
       checkError(fd >= 0);
       return new SystemFd(fd);
     } catch (Throwable t) {
@@ -1161,13 +1190,12 @@ public class LocalVFS implements VirtualFileSystem {
 
   private Stat statByFd(SystemFd fd) throws IOException {
 
-    try(var scope = MemorySession.openConfined()) {
+    try(var arena = Arena.openConfined()) {
 
-      MemorySegment rawStat = MemorySegment.allocateNative(STATX_LAYOUT, scope);
-      SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
-      var emptyString = allocator.allocateUtf8String("");
+      MemorySegment rawStat = arena.allocate(STATX_LAYOUT);
+      var emptyString = arena.allocateUtf8String("");
 
-      int rc = (int) fStatx.invoke(fd.fd(), emptyString, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW, STATX_ALL, rawStat);
+      int rc = (int) fStatx.invokeExact(fd.fd(), emptyString, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW, STATX_ALL, rawStat);
 
       checkError(rc == 0);
       return toVfsStat(rawStat);
@@ -1262,7 +1290,7 @@ public class LocalVFS implements VirtualFileSystem {
     bb.flip();
     try {
       var dataRaw = MemorySegment.ofBuffer(bb);
-      return (int)fIoctl.invoke(fd, request, dataRaw);
+      return (int)fIoctl.invokeExact(fd, request, dataRaw);
     }  catch (Throwable t) {
       Throwables.throwIfInstanceOf(t, IOException.class);
       throw new RuntimeException(t);
@@ -1272,7 +1300,7 @@ public class LocalVFS implements VirtualFileSystem {
   // FFI helpers
   private String strerror(int errno) {
     try {
-      MemoryAddress o = (MemoryAddress) fStrerror.invoke(errno);
+      MemorySegment o = (MemorySegment) fStrerror.invokeExact(errno);
       return o.getUtf8String(0);
     } catch (Throwable t) {
       throw new RuntimeException(t);
@@ -1280,11 +1308,10 @@ public class LocalVFS implements VirtualFileSystem {
   }
 
   private int open(String name) {
-    try(var scope = MemorySession.openConfined()){
-      SegmentAllocator allocator = SegmentAllocator.newNativeArena(scope);
+    try(var arena = Arena.openConfined()){
 
-      MemorySegment str = allocator.allocateUtf8String(name);
-      return (int)fOpen.invoke(str, O_DIRECTORY, O_RDONLY);
+      MemorySegment str = arena.allocateUtf8String(name);
+      return (int)fOpen.invokeExact(str, O_DIRECTORY, O_RDONLY);
     } catch (Throwable t) {
       throw new RuntimeException(t);
     }
@@ -1292,7 +1319,7 @@ public class LocalVFS implements VirtualFileSystem {
 
   private int close(int fd) {
     try{
-      return (int)fClose.invoke(fd);
+      return (int)fClose.invokeExact(fd);
     } catch (Throwable t) {
       throw new RuntimeException(t);
     }
@@ -1326,8 +1353,8 @@ public class LocalVFS implements VirtualFileSystem {
   }
 
   private int errno() {
-    try (var scope = MemorySession.openConfined()) {
-      MemoryAddress a = (MemoryAddress)fErrono.invoke();
+    try (var arena = Arena.openConfined()) {
+      MemorySegment a = (MemorySegment)fErrono.invokeExact();
       return a.get(JAVA_INT, 0);
     } catch (Throwable t) {
       Throwables.throwIfUnchecked(t);
