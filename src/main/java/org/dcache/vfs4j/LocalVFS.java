@@ -573,12 +573,9 @@ public class LocalVFS implements VirtualFileSystem {
   public DirectoryStream list(Inode inode, byte[] verifier, long cookie) throws IOException {
 
     TreeSet<DirectoryEntry> list = new TreeSet<>();
-    try (var arena = Arena.openConfined()) {
-
-      SystemFd fd = _openDirCache.get(new KernelFileHandle(inode));
+    try (var arena = Arena.openConfined(); var fd =  inode2fd(new KernelFileHandle(inode), O_NOFOLLOW | O_DIRECTORY)) {
 
       MemorySegment dirents = arena.allocate(DIRENT_LAYOUT.byteSize()*8192);
-
       while (true) {
         long n = (long) fGetdents.invokeExact(fd.fd(), dirents, DIRENT_LAYOUT.byteSize());
         checkError(n >= 0);
