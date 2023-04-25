@@ -745,7 +745,7 @@ public class LocalVFS implements VirtualFileSystem {
       checkError(rc >= 0);
 
       // the returned buffer is not null-terminated
-      link.setAtIndex(JAVA_CHAR, rc, '\n');
+      link.setAtIndex(JAVA_CHAR, rc, (char)0);
       return link.getUtf8String(0);
 
     } catch (Throwable t) {
