@@ -737,15 +737,16 @@ public class LocalVFS implements VirtualFileSystem {
     try (SystemFd fd = inode2fd(inode, O_PATH | O_NOFOLLOW);
         var arena = Arena.openConfined()) {
 
+
+
       var emptyString = arena.allocateUtf8String("");
 
-      var link = arena.allocate(MAX_NAME_LEN); // max path name length
+      var stat = statByFd(fd); // get link size
+      var link = arena.allocate(stat.getSize());
 
       int rc = (int) fReadlinkAt.invokeExact(fd.fd(), emptyString, link, (int)link.byteSize());
       checkError(rc >= 0);
 
-      // the returned buffer is not null-terminated
-      link.set(JAVA_BYTE, rc, (byte)0);
       return link.getUtf8String(0);
 
     } catch (Throwable t) {
