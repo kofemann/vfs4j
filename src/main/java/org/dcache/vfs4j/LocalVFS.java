@@ -17,6 +17,7 @@ import java.lang.foreign.Linker;
 import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
+import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.VarHandle;
 import java.nio.ByteBuffer;
@@ -743,6 +744,8 @@ public class LocalVFS implements VirtualFileSystem {
       int rc = (int) fReadlinkAt.invokeExact(fd.fd(), emptyString, link, (int)link.byteSize());
       checkError(rc >= 0);
 
+      // the returned buffer is not null-terminated
+      link.setAtIndex(JAVA_CHAR, rc, '\n');
       return link.getUtf8String(0);
 
     } catch (Throwable t) {
