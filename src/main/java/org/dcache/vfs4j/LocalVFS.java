@@ -978,8 +978,18 @@ public class LocalVFS implements VirtualFileSystem {
 
     try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var arena = Arena.openConfined()) {
 
-      var out = arena.allocate(1024);
-      int rc = (int)fListxattr.invokeExact(fd.fd(), out, (int)out.byteSize());
+
+      var out = arena.allocate(0);
+
+      int rc;
+      do {
+        // get the expected reply size
+        rc = (int)fListxattr.invokeExact(fd.fd(), MemorySegment.NULL, 0);
+        checkError(rc >= 0);
+
+        out = arena.allocate(rc);
+        rc = (int)fListxattr.invokeExact(fd.fd(), out, (int)out.byteSize());
+      }while (rc == Errno.ERANGE.errno());
       checkError(rc >= 0);
 
       byte[] listRaw = out.toArray(JAVA_BYTE);

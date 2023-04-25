@@ -157,6 +157,10 @@ public enum Errno {
     this.value = errno;
   }
 
+  int errno() {
+    return value;
+  }
+
   static Errno valueOf(int errno) {
     if (errno > errors.length) {
       return EINVAL;
