@@ -742,7 +742,7 @@ public class LocalVFS implements VirtualFileSystem {
       var emptyString = arena.allocateUtf8String("");
 
       var stat = statByFd(fd); // get link size
-      var link = arena.allocate(stat.getSize());
+      var link = arena.allocate(stat.getSize() + 1); // space for null-terminator
 
       int rc = (int) fReadlinkAt.invokeExact(fd.fd(), emptyString, link, (int)link.byteSize());
       checkError(rc >= 0);
