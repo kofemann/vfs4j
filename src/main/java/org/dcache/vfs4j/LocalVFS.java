@@ -1172,6 +1172,7 @@ public class LocalVFS implements VirtualFileSystem {
       case ENODATA -> throw new NoXattrException(msg);
       case ENOSPC -> throw new NoSpcException(msg);
       case EPERM -> throw new PermException(msg);
+      case ENAMETOOLONG -> throw new NameTooLongException(msg);
       default -> {
         IOException t = new ServerFaultException(msg);
         LOG.error("Unhandled POSIX error {} : {}", e,  msg);
