@@ -570,8 +570,8 @@ public class LocalVFS implements VirtualFileSystem {
     }
   }
 
-  @Override
-  public DirectoryStream list(Inode inode, byte[] verifier, long cookie) throws IOException {
+//  @Override
+  public DirectoryStream list0(Inode inode, byte[] verifier, long cookie) throws IOException {
 
     TreeSet<DirectoryEntry> list = new TreeSet<>();
     try (var arena = Arena.ofConfined(); var fd =  inode2fd(new KernelFileHandle(inode), O_NOFOLLOW | O_DIRECTORY)) {
@@ -607,9 +607,8 @@ public class LocalVFS implements VirtualFileSystem {
     }
   }
 
-  //@Override
-  // REVISIT: this version doesn't work as expected
-  public DirectoryStream list_dead(Inode inode, byte[] verifier, long cookie) throws IOException {
+  @Override
+  public DirectoryStream list(Inode inode, byte[] verifier, long cookie) throws IOException {
 
     TreeSet<DirectoryEntry> list = new TreeSet<>();
     try (var arena = Arena.ofConfined()) {
@@ -622,16 +621,15 @@ public class LocalVFS implements VirtualFileSystem {
 
       while (true) {
         MemorySegment dirent = (MemorySegment) fReaddir.invokeExact(p);
-        if (dirent == MemorySegment.NULL) {
+        if (MemorySegment.NULL.equals(dirent)) {
           break;
         }
 
         dirent = dirent.reinterpret(DIRENT_LAYOUT.byteSize());
-
         long off = (long)VH_DIRENT_OFF.get(dirent);
         int reclen = (int)VH_DIRENT_RECLEN.get(dirent);
 
-        String name = dirent.asSlice(DIRENT_LAYOUT.byteOffset(groupElement("name")), reclen).getUtf8String(0);
+        String name = dirent.getUtf8String(DIRENT_LAYOUT.byteOffset(groupElement("name")));
         Inode fInode = lookup0(fd.fd(), name);
         Stat stat = getattr(fInode);
         list.add(new DirectoryEntry(name, fInode, stat, off));
@@ -1315,7 +1313,8 @@ public class LocalVFS implements VirtualFileSystem {
   private String strerror(int errno) {
     try {
       MemorySegment o = (MemorySegment) fStrerror.invokeExact(errno);
-      return o.getUtf8String(0);
+      // Hmm the size is unknown ....
+      return o.reinterpret(1024).getUtf8String(0);
     } catch (Throwable t) {
       throw new RuntimeException(t);
     }
@@ -1369,7 +1368,7 @@ public class LocalVFS implements VirtualFileSystem {
   private int errno() {
     try (var arena = Arena.ofConfined()) {
       MemorySegment a = (MemorySegment)fErrono.invokeExact();
-      return a.get(JAVA_INT, 0);
+      return a.reinterpret(JAVA_INT.byteSize()).get(JAVA_INT, 0);
     } catch (Throwable t) {
       Throwables.throwIfUnchecked(t);
       throw new RuntimeException(t);
