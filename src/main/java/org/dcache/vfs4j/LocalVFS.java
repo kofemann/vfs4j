@@ -1086,8 +1086,8 @@ public class LocalVFS implements VirtualFileSystem {
                 var srcPosRef = arena.allocate(Long.BYTES);
                 var dstPosRef = arena.allocate(Long.BYTES);
 
-                srcPosRef.asByteBuffer().order(ByteOrder.nativeOrder()).putLong(0, srcPos);
-                dstPosRef.asByteBuffer().order(ByteOrder.nativeOrder()).putLong(0, dstPos);
+                srcPosRef.set(JAVA_LONG, 0, srcPos);
+                dstPosRef.set(JAVA_LONG, 0, dstPos);
 
                 return (int)fCopyFileRange.invokeExact(
                         fdIn.fd(), srcPosRef,
@@ -1124,8 +1124,7 @@ public class LocalVFS implements VirtualFileSystem {
       MemorySegment bytes = arena.allocate(KernelFileHandle.MAX_HANDLE_SZ);
       MemorySegment mntId = arena.allocate(Integer.BYTES);
 
-      ByteBuffer asByteBuffer = bytes.asByteBuffer().order(ByteOrder.nativeOrder());
-      asByteBuffer.putInt(0, (int)bytes.byteSize());
+      bytes.set(JAVA_INT, 0, (int) bytes.byteSize());
 
       int rc = (int)fNameToHandleAt.invokeExact(fd, str, bytes, mntId, flags);
       checkError(rc == 0);
