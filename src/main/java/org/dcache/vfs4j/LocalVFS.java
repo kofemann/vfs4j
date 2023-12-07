@@ -838,18 +838,13 @@ public class LocalVFS implements VirtualFileSystem {
 
       int rc = 0;
       switch (stabilityLevel) {
-        case UNSTABLE:
-          // NOP
-          break;
-        case DATA_SYNC:
-          rc = (int)fDataSync.invokeExact(fd.fd());
-          break;
-        case FILE_SYNC:
-          rc = (int)fSync.invokeExact(fd.fd());
-          break;
-        default:
-          throw new RuntimeException("bad sync type");
+        case UNSTABLE -> {
+            }
+        case DATA_SYNC -> rc = (int)fDataSync.invokeExact(fd.fd());
+        case FILE_SYNC -> rc = (int)fSync.invokeExact(fd.fd());
+        default -> throw new RuntimeException("bad sync type");
       }
+        // NOP
       checkError(rc == 0);
       return new WriteResult(stabilityLevel, n);
     } catch (Throwable t) {
