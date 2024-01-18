@@ -73,6 +73,14 @@ public class NfsMain implements Callable<Void> {
           defaultValue = "true")
   private boolean withV4;
 
+  @CommandLine.Option(
+          names = {"--port"},
+          negatable = false,
+          description = "Specify NFS server port to listen on",
+          showDefaultValue = CommandLine.Help.Visibility.ALWAYS,
+          defaultValue = "2049")
+  private int port;
+
   @CommandLine.Parameters(index = "0", description = "directory to export")
   private File dir;
 
@@ -102,13 +110,14 @@ public class NfsMain implements Callable<Void> {
     VirtualFileSystem vfs = new LocalVFS(dir);
     OncRpcSvc nfsSvc =
         new OncRpcSvcBuilder()
-            .withPort(2049)
+            .withPort(port)
             .withTCP()
             .withAutoPublish()
             .withWorkerThreadIoStrategy()
             .withStartTLS()
             .withSSLContext(sslContext)
             .withSSLParameters(sslParameters)
+            .withServiceName("nfsd@" + port)
             .build();
 
     ExportTable exportFile = new ExportFile(export);
