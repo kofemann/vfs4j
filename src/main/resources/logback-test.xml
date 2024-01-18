@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <configuration>
-    <jmxConfigurator />
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%X{mdc.client}] [%thread] %highlight(%-5level) %cyan(%logger{15}) - %msg%n</pattern>
