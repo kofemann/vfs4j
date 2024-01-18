@@ -11,6 +11,8 @@ import org.dcache.nfs.vfs.VirtualFileSystem;
 import org.dcache.oncrpc4j.rpc.OncRpcProgram;
 import org.dcache.oncrpc4j.rpc.OncRpcSvc;
 import org.dcache.oncrpc4j.rpc.OncRpcSvcBuilder;
+import org.dcache.oncrpc4j.rpc.net.IpProtocolType;
+import org.slf4j.Logger;
 import picocli.CommandLine;
 
 import javax.net.ssl.SSLContext;
@@ -20,6 +22,8 @@ import java.util.concurrent.Callable;
 
 @CommandLine.Command(name = "nfs4j", mixinStandardHelpOptions = true, version = "0.0.1", showDefaultValues = true)
 public class NfsMain implements Callable<Void> {
+
+  private final static Logger LOGGER = org.slf4j.LoggerFactory.getLogger(NfsMain.class);
 
   @CommandLine.Option(
       names = {"--cert"},
@@ -140,6 +144,7 @@ public class NfsMain implements Callable<Void> {
     }
 
     nfsSvc.start();
+    LOGGER.info("Starting NFS service on port {}", nfsSvc.getInetSocketAddress(IpProtocolType.TCP).getPort());
 
     Thread.currentThread().join();
     return null;
