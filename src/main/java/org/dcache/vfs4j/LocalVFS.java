@@ -17,7 +17,6 @@ import java.lang.foreign.Linker;
 import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
-import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.VarHandle;
 import java.nio.ByteBuffer;
@@ -464,8 +463,8 @@ public class LocalVFS implements VirtualFileSystem {
 
       SystemFd fd = _openDirCache.get(new KernelFileHandle(parent));
 
-      var emptyString = arena.allocateUtf8String("");
-      var pathRaw = arena.allocateUtf8String(path);
+      var emptyString = arena.allocateFrom("");
+      var pathRaw = arena.allocateFrom(path);
 
       int rc;
       if (type == Stat.Type.REGULAR) {
@@ -508,11 +507,11 @@ public class LocalVFS implements VirtualFileSystem {
       int rc = (int)fStatFs.invokeExact(rootFd, rawStatFS);
       checkError(rc == 0);
 
-      long  f_bsize = (long)VH_STATFS_BSIZE.get(rawStatFS);
-      long f_blocks = (long)VH_STATFS_BLOCKS.get(rawStatFS);
-      long f_free = (long)VH_STATFS_FREE.get(rawStatFS);
-      long f_files = (long)VH_STATFS_FILES.get(rawStatFS);
-      long f_ffree = (long)VH_STATFS_FFREE.get(rawStatFS);
+      long  f_bsize = (long)VH_STATFS_BSIZE.get(rawStatFS, 0);
+      long f_blocks = (long)VH_STATFS_BLOCKS.get(rawStatFS, 0);
+      long f_free = (long)VH_STATFS_FREE.get(rawStatFS, 0);
+      long f_files = (long)VH_STATFS_FILES.get(rawStatFS, 0);
+      long f_ffree = (long)VH_STATFS_FFREE.get(rawStatFS, 0);
 
       return new FsStat(
           f_blocks * f_bsize,
@@ -557,8 +556,8 @@ public class LocalVFS implements VirtualFileSystem {
     try (SystemFd dirFd = inode2fd(parent, O_NOFOLLOW | O_DIRECTORY);
          SystemFd inodeFd = inode2fd(link, O_NOFOLLOW); var arena = Arena.ofConfined()) {
 
-      var emptyString = arena.allocateUtf8String("");
-      var pathRaw = arena.allocateUtf8String(path);
+      var emptyString = arena.allocateFrom("");
+      var pathRaw = arena.allocateFrom(path);
 
       int rc = (int) fLinkAt.invokeExact(inodeFd.fd(), emptyString, dirFd.fd(), pathRaw, AT_EMPTY_PATH);
 
@@ -591,7 +590,7 @@ public class LocalVFS implements VirtualFileSystem {
           int reclen = (int)VH_DIRENT_RECLEN.get(dirent);
 
           if (off > cookie) {
-            String name = dirent.asSlice(DIRENT_LAYOUT.byteOffset(groupElement("name")), reclen).getUtf8String(0);
+            String name = dirent.asSlice(DIRENT_LAYOUT.byteOffset(groupElement("name")), reclen).getString(0);
             Inode fInode = lookup0(fd.fd(), name);
             Stat stat = getattr(fInode);
             list.add(new DirectoryEntry(name, fInode, stat, off));
@@ -626,10 +625,10 @@ public class LocalVFS implements VirtualFileSystem {
         }
 
         dirent = dirent.reinterpret(DIRENT_LAYOUT.byteSize());
-        long off = (long)VH_DIRENT_OFF.get(dirent);
-        int reclen = (int)VH_DIRENT_RECLEN.get(dirent);
+        long off = (long)VH_DIRENT_OFF.get(dirent, 0);
+        int reclen = (int)VH_DIRENT_RECLEN.get(dirent, 0);
 
-        String name = dirent.getUtf8String(DIRENT_LAYOUT.byteOffset(groupElement("name")));
+        String name = dirent.getString(DIRENT_LAYOUT.byteOffset(groupElement("name")));
         Inode fInode = lookup0(fd.fd(), name);
         Stat stat = getattr(fInode);
         list.add(new DirectoryEntry(name, fInode, stat, off));
@@ -655,8 +654,8 @@ public class LocalVFS implements VirtualFileSystem {
 
       SystemFd fd = _openDirCache.get(new KernelFileHandle(parent));
 
-      var emptyString = arena.allocateUtf8String("");
-      var pathRaw = arena.allocateUtf8String(path);
+      var emptyString = arena.allocateFrom("");
+      var pathRaw = arena.allocateFrom(path);
 
       int rc = (int) fMkdirAt.invokeExact(fd.fd(), pathRaw, mode);
       checkError(rc == 0);
@@ -678,8 +677,8 @@ public class LocalVFS implements VirtualFileSystem {
          SystemFd fd2 = inode2fd(dest, O_PATH | O_NOACCESS);
          var arena = Arena.ofConfined()) {
 
-      MemorySegment newNameRaw = arena.allocateUtf8String(newName);
-      MemorySegment oldNameRaw = arena.allocateUtf8String(oldName);
+      MemorySegment newNameRaw = arena.allocateFrom(newName);
+      MemorySegment oldNameRaw = arena.allocateFrom(oldName);
 
         int rc = (int) fRenameAt.invokeExact(fd1.fd(), oldNameRaw, fd2.fd(), newNameRaw);
         checkError(rc == 0);
@@ -739,7 +738,7 @@ public class LocalVFS implements VirtualFileSystem {
 
 
 
-      var emptyString = arena.allocateUtf8String("");
+      var emptyString = arena.allocateFrom("");
 
       var stat = statByFd(fd); // get link size
       var link = arena.allocate(stat.getSize() + 1); // space for null-terminator
@@ -747,7 +746,7 @@ public class LocalVFS implements VirtualFileSystem {
       int rc = (int) fReadlinkAt.invokeExact(fd.fd(), emptyString, link, (int)link.byteSize());
       checkError(rc >= 0);
 
-      return link.getUtf8String(0);
+      return link.getString(0);
 
     } catch (Throwable t) {
       Throwables.throwIfInstanceOf(t, IOException.class);
@@ -760,7 +759,7 @@ public class LocalVFS implements VirtualFileSystem {
     try (var arena = Arena.ofConfined()) {
 
       SystemFd fd = _openDirCache.get(new KernelFileHandle(parent));
-      var pathRaw = arena.allocateUtf8String(path);
+      var pathRaw = arena.allocateFrom(path);
       Inode inode = lookup0(fd.fd(), path);
       Stat stat = getattr(inode);
       int flags = stat.type() == Stat.Type.DIRECTORY ? AT_REMOVEDIR : 0;
@@ -787,9 +786,9 @@ public class LocalVFS implements VirtualFileSystem {
 
       SystemFd fd = _openDirCache.get(new KernelFileHandle(parent));
 
-      var emptyString = arena.allocateUtf8String("");
-      var pathRaw = arena.allocateUtf8String(path);
-      var linkRaw = arena.allocateUtf8String(link);
+      var emptyString = arena.allocateFrom("");
+      var pathRaw = arena.allocateFrom(path);
+      var linkRaw = arena.allocateFrom(link);
 
       int rc = (int) fSymlinkAt.invokeExact(linkRaw, fd.fd(), pathRaw);
       checkError(rc == 0);
@@ -884,7 +883,7 @@ public class LocalVFS implements VirtualFileSystem {
 
     try (SystemFd fd = inode2fd(inode, openMode); var arena = Arena.ofConfined()) {
 
-      var emptyString = arena.allocateUtf8String("");
+      var emptyString = arena.allocateFrom("");
 
       int uid = -1;
       int gid = -1;
@@ -1013,7 +1012,7 @@ public class LocalVFS implements VirtualFileSystem {
 
     try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var arena = Arena.ofConfined()) {
 
-      var attrName = arena.allocateUtf8String(toXattrName(name));
+      var attrName = arena.allocateFrom(toXattrName(name));
       var out = arena.allocate(64*1024);
       int rc = (int)fGetxattr.invokeExact(fd.fd(), attrName, out, (int)out.byteSize());
       checkError(rc >= 0);
@@ -1039,7 +1038,7 @@ public class LocalVFS implements VirtualFileSystem {
 
     try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var arena = Arena.ofConfined()) {
 
-      var attrName = arena.allocateUtf8String(toXattrName(attr));
+      var attrName = arena.allocateFrom(toXattrName(attr));
       var dataRaw = MemorySegment.ofBuffer(data);
       int rc = (int)fSetxattr.invokeExact(fd.fd(), attrName, dataRaw, value.length, flag);
       checkError(rc == 0);
@@ -1052,7 +1051,7 @@ public class LocalVFS implements VirtualFileSystem {
   @Override
   public void removeXattr(Inode inode, String attr) throws IOException {
     try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var arena = Arena.ofConfined()) {
-      var attrName = arena.allocateUtf8String(toXattrName(attr));
+      var attrName = arena.allocateFrom(toXattrName(attr));
       int rc = (int)fRemovexattr.invokeExact(fd.fd(), attrName);
       checkError(rc == 0);
     } catch (Throwable t) {
@@ -1115,7 +1114,7 @@ public class LocalVFS implements VirtualFileSystem {
 
     try(var arena = Arena.ofConfined()){
 
-      MemorySegment str = arena.allocateUtf8String(path);
+      MemorySegment str = arena.allocateFrom(path);
       MemorySegment bytes = arena.allocate(KernelFileHandle.MAX_HANDLE_SZ);
       MemorySegment mntId = arena.allocate(Integer.BYTES);
 
@@ -1199,7 +1198,7 @@ public class LocalVFS implements VirtualFileSystem {
     try(var arena = Arena.ofConfined()) {
 
       MemorySegment rawStat = arena.allocate(STATX_LAYOUT);
-      var emptyString = arena.allocateUtf8String("");
+      var emptyString = arena.allocateFrom("");
 
       int rc = (int) fStatx.invokeExact(fd.fd(), emptyString, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW, STATX_ALL, rawStat);
 
@@ -1308,7 +1307,7 @@ public class LocalVFS implements VirtualFileSystem {
     try {
       MemorySegment o = (MemorySegment) fStrerror.invokeExact(errno);
       // Hmm the size is unknown ....
-      return o.reinterpret(1024).getUtf8String(0);
+      return o.reinterpret(1024).getString(0);
     } catch (Throwable t) {
       throw new RuntimeException(t);
     }
@@ -1317,7 +1316,7 @@ public class LocalVFS implements VirtualFileSystem {
   private int open(String name) {
     try(var arena = Arena.ofConfined()){
 
-      MemorySegment str = arena.allocateUtf8String(name);
+      MemorySegment str = arena.allocateFrom(name);
       return (int)fOpen.invokeExact(str, O_DIRECTORY, O_RDONLY);
     } catch (Throwable t) {
       throw new RuntimeException(t);

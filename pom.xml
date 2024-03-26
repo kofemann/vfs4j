@@ -9,7 +9,7 @@
     <url>https://github.com/kofemann/vfs4j</url>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <java.version>21</java.version>
+        <java.version>22</java.version>
         <version.picocli>4.7.4</version.picocli>
         <ssl-kickstart.version>8.2.0</ssl-kickstart.version>
     </properties>
@@ -27,10 +27,7 @@
                      <!-- without forking compilation happens in the
                          same process, so no arguments are applied -->
                     <fork>true</fork>
-                    <executable>/usr/lib/jvm/java-21/bin/javac</executable>
-                    <compilerArgs>
-                        <arg>--enable-preview</arg>
-                    </compilerArgs>
+                    <executable>/usr/lib/jvm/java-22/bin/javac</executable>
                     <!-- for GraalVM native image -->
                     <annotationProcessorPaths>
                         <path>
