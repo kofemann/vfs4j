@@ -6,18 +6,18 @@ which is based on Linux's open-by-handle API.
 ## Usage
 
 
-The vfs4j uses Java 19 [Foreign Function (Preview) API][1] which requires additional JVM options.
+The vfs4j uses Java 22 [Foreign Function and Memory API][1], which requires additional JVM options.
 
 ```
 $ sudo java --enable-preview --enable-native-access=ALL-UNNAMED \
     -jar target/vfs4j-1.0-SNAPSHOT.jar /directory/to/export /path/to/export/file
 ```
 
-The **exports** file is compatible with standard **/etc/exports** file format.
+The **exports** file is compatible with the standard **/etc/exports** file format.
 
 ## How to contribute
 
-**VFS4J** uses the linux kernel model where git is not only source repository,
+**VFS4J** uses the linux kernel model where git is not only the source repository,
 but also the way to track contributions and copyrights.
 
 Each submitted patch must have a "Signed-off-by" line.  Patches without
@@ -54,7 +54,7 @@ can certify the below:
         maintained indefinitely and may be redistributed consistent with
         this project or the open source license(s) involved.
 ```
-then you just add a line saying ( git commit -s )
+Then you add a line saying ( git commit -s )
 
     Signed-off-by: Random J Developer <random@developer.example.org>
 
@@ -64,5 +64,5 @@ using your real name (sorry, no pseudonyms or anonymous contributions.)
 
 This work is published under the [Apache License 2.0][2]
 
-[1]: https://bugs.openjdk.org/browse/JDK-8282048
+[1]: https://docs.oracle.com/en/java/javase/22/core/foreign-function-and-memory-api.html
 [2]: LICENSE
