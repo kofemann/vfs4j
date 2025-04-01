@@ -423,11 +423,14 @@ public class LocalVFS implements VirtualFileSystem {
     );
   }
 
+  /** Memory arena for native calls; */
+  private final Arena arena;
+
   public LocalVFS(File root) throws IOException {
 
-    rootFd = open(root.getAbsolutePath());
-    checkError(rootFd >= 0);
+    arena = Arena.ofAuto();
 
+    rootFd = open(root.getAbsolutePath());
     rootFh = path2fh(rootFd, "", AT_EMPTY_PATH);
 
     _openFilesCache =
@@ -459,7 +462,7 @@ public class LocalVFS implements VirtualFileSystem {
       throw new NotSuppException("create of this type not supported");
     }
 
-    try (var arena = Arena.ofConfined()) {
+    try {
 
       SystemFd fd = _openDirCache.get(new KernelFileHandle(parent));
 
@@ -501,7 +504,7 @@ public class LocalVFS implements VirtualFileSystem {
   @Override
   public FsStat getFsStat() throws IOException {
 
-    try(var arena = Arena.ofConfined()) {
+    try {
 
       MemorySegment rawStatFS = arena.allocate(STAT_FS_LAYOUT);
       int rc = (int)fStatFs.invokeExact(rootFd, rawStatFS);
@@ -554,7 +557,7 @@ public class LocalVFS implements VirtualFileSystem {
   @Override
   public Inode link(Inode parent, Inode link, String path, Subject subject) throws IOException {
     try (SystemFd dirFd = inode2fd(parent, O_NOFOLLOW | O_DIRECTORY);
-         SystemFd inodeFd = inode2fd(link, O_NOFOLLOW); var arena = Arena.ofConfined()) {
+        SystemFd inodeFd = inode2fd(link, O_NOFOLLOW); ) {
 
       var emptyString = arena.allocateFrom("");
       var pathRaw = arena.allocateFrom(path);
@@ -573,7 +576,7 @@ public class LocalVFS implements VirtualFileSystem {
   public DirectoryStream list0(Inode inode, byte[] verifier, long cookie) throws IOException {
 
     TreeSet<DirectoryEntry> list = new TreeSet<>();
-    try (var arena = Arena.ofConfined(); var fd =  inode2fd(new KernelFileHandle(inode), O_NOFOLLOW | O_DIRECTORY)) {
+    try (var fd = inode2fd(new KernelFileHandle(inode), O_NOFOLLOW | O_DIRECTORY)) {
 
       MemorySegment dirents = arena.allocate(DIRENT_LAYOUT.byteSize()*8192);
       while (true) {
@@ -610,8 +613,7 @@ public class LocalVFS implements VirtualFileSystem {
   public DirectoryStream list(Inode inode, byte[] verifier, long cookie) throws IOException {
 
     TreeSet<DirectoryEntry> list = new TreeSet<>();
-    try (var arena = Arena.ofConfined()) {
-
+    try {
       SystemFd fd = _openDirCache.get(new KernelFileHandle(inode));
       MemorySegment p = (MemorySegment) fOpendir.invokeExact(fd.fd());
       checkError(p != MemorySegment.NULL);
@@ -650,7 +652,7 @@ public class LocalVFS implements VirtualFileSystem {
     int gid = (int) UnixSubjects.getPrimaryGid(subject);
 
     Inode inode;
-    try (var arena = Arena.ofConfined()) {
+    try {
 
       SystemFd fd = _openDirCache.get(new KernelFileHandle(parent));
 
@@ -674,8 +676,7 @@ public class LocalVFS implements VirtualFileSystem {
   @Override
   public boolean move(Inode src, String oldName, Inode dest, String newName) throws IOException {
     try (SystemFd fd1 = inode2fd(src, O_PATH | O_NOACCESS );
-         SystemFd fd2 = inode2fd(dest, O_PATH | O_NOACCESS);
-         var arena = Arena.ofConfined()) {
+         SystemFd fd2 = inode2fd(dest, O_PATH | O_NOACCESS)) {
 
       MemorySegment newNameRaw = arena.allocateFrom(newName);
       MemorySegment oldNameRaw = arena.allocateFrom(oldName);
@@ -709,11 +710,14 @@ public class LocalVFS implements VirtualFileSystem {
 
     ByteBuffer bb = data;
     if (!data.isDirect()) {
-      bb = data.remaining() > MAX_CACHE ? ByteBuffer.allocateDirect(data.remaining()) : BUFFERS.get();
+      bb =
+          data.remaining() > MAX_CACHE
+              ? ByteBuffer.allocateDirect(data.remaining())
+              : BUFFERS.get();
       bb.clear().limit(data.remaining());
     }
 
-    try (var arena = Arena.ofConfined()) {
+    try {
         MemorySegment rawData = MemorySegment.ofBuffer(bb);
 
         int n = (int)fPread.invokeExact(fd.fd(), rawData, data.remaining(), offset);
@@ -733,10 +737,7 @@ public class LocalVFS implements VirtualFileSystem {
 
   @Override
   public String readlink(Inode inode) throws IOException {
-    try (SystemFd fd = inode2fd(inode, O_PATH | O_NOFOLLOW);
-        var arena = Arena.ofConfined()) {
-
-
+    try (SystemFd fd = inode2fd(inode, O_PATH | O_NOFOLLOW); ) {
 
       var emptyString = arena.allocateFrom("");
 
@@ -756,7 +757,7 @@ public class LocalVFS implements VirtualFileSystem {
 
   @Override
   public void remove(Inode parent, String path) throws IOException {
-    try (var arena = Arena.ofConfined()) {
+    try {
 
       SystemFd fd = _openDirCache.get(new KernelFileHandle(parent));
       var pathRaw = arena.allocateFrom(path);
@@ -782,7 +783,7 @@ public class LocalVFS implements VirtualFileSystem {
     int uid = (int) UnixSubjects.getUid(subject);
     int gid = (int) UnixSubjects.getPrimaryGid(subject);
 
-    try (var arena = Arena.ofConfined()) {
+    try {
 
       SystemFd fd = _openDirCache.get(new KernelFileHandle(parent));
 
@@ -881,7 +882,7 @@ public class LocalVFS implements VirtualFileSystem {
       openMode |= O_RDWR;
     }
 
-    try (SystemFd fd = inode2fd(inode, openMode); var arena = Arena.ofConfined()) {
+    try (SystemFd fd = inode2fd(inode, openMode)) {
 
       var emptyString = arena.allocateFrom("");
 
@@ -974,8 +975,7 @@ public class LocalVFS implements VirtualFileSystem {
   @Override
   public String[] listXattrs(Inode inode) throws IOException {
 
-    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var arena = Arena.ofConfined()) {
-
+    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW)) {
 
       var out = arena.allocate(0);
 
@@ -1010,8 +1010,7 @@ public class LocalVFS implements VirtualFileSystem {
   @Override
   public byte[] getXattr(Inode inode, String name) throws IOException {
 
-    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var arena = Arena.ofConfined()) {
-
+    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW)) {
       var attrName = arena.allocateFrom(toXattrName(name));
       var out = arena.allocate(64*1024);
       int rc = (int)fGetxattr.invokeExact(fd.fd(), attrName, out, (int)out.byteSize());
@@ -1036,7 +1035,7 @@ public class LocalVFS implements VirtualFileSystem {
     var data = ByteBuffer.allocateDirect(value.length);
     data.put(value);
 
-    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var arena = Arena.ofConfined()) {
+    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW)) {
 
       var attrName = arena.allocateFrom(toXattrName(attr));
       var dataRaw = MemorySegment.ofBuffer(data);
@@ -1050,7 +1049,7 @@ public class LocalVFS implements VirtualFileSystem {
 
   @Override
   public void removeXattr(Inode inode, String attr) throws IOException {
-    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW); var arena = Arena.ofConfined()) {
+    try (SystemFd fd = inode2fd(inode, O_NOFOLLOW)) {
       var attrName = arena.allocateFrom(toXattrName(attr));
       int rc = (int)fRemovexattr.invokeExact(fd.fd(), attrName);
       checkError(rc == 0);
@@ -1075,7 +1074,7 @@ public class LocalVFS implements VirtualFileSystem {
 
     return CompletableFuture.supplyAsync(
             () -> {
-              try (var arena = Arena.ofConfined()) {
+              try {
 
                 var srcPosRef = arena.allocate(Long.BYTES);
                 var dstPosRef = arena.allocate(Long.BYTES);
@@ -1112,7 +1111,7 @@ public class LocalVFS implements VirtualFileSystem {
    */
   private KernelFileHandle path2fh(int fd, String path, int flags) throws IOException {
 
-    try(var arena = Arena.ofConfined()){
+    try {
 
       MemorySegment str = arena.allocateFrom(path);
       MemorySegment bytes = arena.allocate(KernelFileHandle.MAX_HANDLE_SZ);
@@ -1135,13 +1134,23 @@ public class LocalVFS implements VirtualFileSystem {
     }
   }
 
+  // must be called with Arena
   protected void checkError(boolean condition) throws IOException {
 
     if (condition) {
       return;
     }
 
-    int errno = errno();
+    int errno;
+
+    try {
+      MemorySegment a = (MemorySegment) fErrono.invokeExact();
+      errno = a.reinterpret(JAVA_INT.byteSize()).get(JAVA_INT, 0);
+    } catch (Throwable t) {
+      Throwables.throwIfUnchecked(t);
+      throw new RuntimeException(t);
+    }
+
     if (errno == 0) {
       return;
     }
@@ -1179,9 +1188,8 @@ public class LocalVFS implements VirtualFileSystem {
   }
 
   private SystemFd inode2fd(KernelFileHandle fh, int flags) throws IOException {
-    byte[] fhBytes = fh.toBytes();
-    try (var arena = Arena.ofConfined()){
-
+    try {
+      byte[] fhBytes = fh.toBytes();
       MemorySegment rawHandle = arena.allocate(fhBytes.length);
       rawHandle.asByteBuffer().put(fhBytes);
       int fd = (int) fOpenByHandleAt.invokeExact(rootFd, rawHandle, flags);
@@ -1195,7 +1203,7 @@ public class LocalVFS implements VirtualFileSystem {
 
   private Stat statByFd(SystemFd fd) throws IOException {
 
-    try(var arena = Arena.ofConfined()) {
+    try {
 
       MemorySegment rawStat = arena.allocate(STATX_LAYOUT);
       var emptyString = arena.allocateFrom("");
@@ -1313,22 +1321,31 @@ public class LocalVFS implements VirtualFileSystem {
     }
   }
 
-  private int open(String name) {
-    try(var arena = Arena.ofConfined()){
-
+  private int open(String name) throws IOException {
+    try {
       MemorySegment str = arena.allocateFrom(name);
-      return (int)fOpen.invokeExact(str, O_DIRECTORY, O_RDONLY);
+      int fd = (int) fOpen.invokeExact(str, O_DIRECTORY, O_RDONLY);
+      checkError(fd >= 0);
+      return fd;
     } catch (Throwable t) {
+      Throwables.throwIfInstanceOf(t, IOException.class);
       throw new RuntimeException(t);
     }
   }
 
   private int close(int fd) {
-    try{
-      return (int)fClose.invokeExact(fd);
+    try {
+      int rc = (int) fClose.invokeExact(fd);
+      checkError(rc == 0);
+      return rc;
     } catch (Throwable t) {
       throw new RuntimeException(t);
     }
+  }
+
+  /** Close filesystem and deallocate shared resources. */
+  public void shutdown() {
+    arena.close();
   }
 
   /** {@link AutoCloseable} class which represents OS native file descriptor. */
@@ -1347,24 +1364,11 @@ public class LocalVFS implements VirtualFileSystem {
     @Override
     public void close() throws IOException {
       int rc = LocalVFS.this.close(fd);
-      checkError(rc == 0);
     }
 
     @Override
     public String toString() {
-      return "SystemFd{" +
-              "fd=" + fd +
-              '}';
-    }
-  }
-
-  private int errno() {
-    try (var arena = Arena.ofConfined()) {
-      MemorySegment a = (MemorySegment)fErrono.invokeExact();
-      return a.reinterpret(JAVA_INT.byteSize()).get(JAVA_INT, 0);
-    } catch (Throwable t) {
-      Throwables.throwIfUnchecked(t);
-      throw new RuntimeException(t);
+      return "SystemFd{" + "fd=" + fd + '}';
     }
   }
 }
