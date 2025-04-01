@@ -11,7 +11,7 @@ jobs:
       - name: Set up JDK 24
         uses: actions/setup-java@v4
         with:
-          java-version: 'r4'
+          java-version: '24'
           distribution: 'temurin'
           cache: maven
       - name: Build with Maven
