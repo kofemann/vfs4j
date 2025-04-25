@@ -10,8 +10,8 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <java.version>24</java.version>
-        <version.picocli>4.7.6</version.picocli>
-        <ssl-kickstart.version>8.3.7</ssl-kickstart.version>
+        <version.picocli>4.7.7</version.picocli>
+        <ssl-kickstart.version>9.1.0</ssl-kickstart.version>
     </properties>
 
     <build>
