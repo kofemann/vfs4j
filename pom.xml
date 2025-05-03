@@ -12,6 +12,7 @@
         <java.version>24</java.version>
         <version.picocli>4.7.7</version.picocli>
         <ssl-kickstart.version>9.1.0</ssl-kickstart.version>
+        <nfs4j.version>0.25.0</nfs4j.version>
     </properties>
 
     <build>
@@ -111,7 +112,7 @@
         <dependency>
             <groupId>org.dcache</groupId>
             <artifactId>nfs4j-core</artifactId>
-            <version>0.25.0</version>
+            <version>${nfs4j.version}</version>
         </dependency>
 
         <dependency>
