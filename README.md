@@ -8,8 +8,8 @@ which is based on Linux's open-by-handle API.
 
 The vfs4j uses Java 22 [Foreign Function and Memory API][1], which requires additional JVM options.
 
-```
-$ sudo java --enable-preview --enable-native-access=ALL-UNNAMED \
+```bash
+sudo java --enable-native-access=ALL-UNNAMED \
     -jar target/vfs4j-1.0-SNAPSHOT.jar /directory/to/export /path/to/export/file
 ```
 
