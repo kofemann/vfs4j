@@ -13,6 +13,8 @@
         <version.picocli>4.7.7</version.picocli>
         <ssl-kickstart.version>9.1.0</ssl-kickstart.version>
         <nfs4j.version>0.25.0</nfs4j.version>
+        <native.maven.plugin.version>0.10.6</native.maven.plugin.version>
+        <graalvm.version>24.0.1</graalvm.version>
     </properties>
 
     <build>
@@ -24,6 +26,7 @@
                 <configuration>
                     <showDeprecation>true</showDeprecation>
                     <encoding>UTF-8</encoding>
+                    <fork>true</fork>
                     <release>${java.version}</release>
                     <!-- for GraalVM native image -->
                     <annotationProcessorPaths>
@@ -148,6 +151,13 @@
             <artifactId>picocli</artifactId>
             <version>${version.picocli}</version>
         </dependency>
+        <!-- required for non graal builds -->
+        <dependency>
+            <groupId>org.graalvm.sdk</groupId>
+            <artifactId>nativeimage</artifactId>
+            <version>${graalvm.version}</version>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
 
     <repositories>
@@ -156,4 +166,43 @@
             <url>https://download.dcache.org/nexus/content/groups/public</url>
         </repository>
     </repositories>
+    
+    <profiles>
+        <profile>
+            <id>native</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.graalvm.buildtools</groupId>
+                        <artifactId>native-maven-plugin</artifactId>
+                        <version>${native.maven.plugin.version}</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <buildArgs>
+                                <buildArg>
+                                    -Ob
+                                </buildArg>
+                            </buildArgs>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>build-native</id>
+                                <goals>
+                                    <goal>compile-no-fork</goal>
+                                </goals>
+                                <phase>package</phase>
+                            </execution>
+                            <execution>
+                                <id>test-native</id>
+                                <goals>
+                                    <goal>test</goal>
+                                </goals>
+                                <phase>test</phase>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
