@@ -1,4 +1,10 @@
 {
+  "resources": [
+    {
+      "glob": "logback*xml",
+      "pattern": "logback\\.xml"
+    }
+  ],
   "bundles": [
     {
       "name": "org.glassfish.grizzly.localization.log",
