@@ -13,15 +13,23 @@ import org.dcache.oncrpc4j.rpc.OncRpcSvc;
 import org.dcache.oncrpc4j.rpc.OncRpcSvcBuilder;
 import org.dcache.oncrpc4j.rpc.net.IpProtocolType;
 import org.slf4j.Logger;
+import org.slf4j.bridge.SLF4JBridgeHandler;
 import picocli.CommandLine;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
 import java.io.File;
 import java.util.concurrent.Callable;
+import java.util.logging.LogManager;
 
 @CommandLine.Command(name = "nfs4j", mixinStandardHelpOptions = true, version = "0.0.1", showDefaultValues = true)
 public class NfsMain implements Callable<Void> {
+
+  static {
+    // Redirect java.util.logging to SLF4J
+    LogManager.getLogManager().reset();
+    SLF4JBridgeHandler.install();
+  }
 
   private final static Logger LOGGER = org.slf4j.LoggerFactory.getLogger(NfsMain.class);
 
