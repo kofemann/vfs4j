@@ -6,8 +6,8 @@ import org.dcache.nfs.v3.MountServer;
 import org.dcache.nfs.v3.NfsServerV3;
 import org.dcache.nfs.v4.MDSOperationExecutor;
 import org.dcache.nfs.v4.NFSServerV41;
+import org.dcache.nfs.v4.NFSv41DeviceManager;
 import org.dcache.nfs.v4.xdr.nfs4_prot;
-import org.dcache.nfs.vfs.VirtualFileSystem;
 import org.dcache.oncrpc4j.rpc.OncRpcProgram;
 import org.dcache.oncrpc4j.rpc.OncRpcSvc;
 import org.dcache.oncrpc4j.rpc.OncRpcSvcBuilder;
@@ -20,6 +20,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
 import java.io.File;
 import java.util.concurrent.Callable;
+import java.util.concurrent.Executors;
 import java.util.logging.LogManager;
 
 @CommandLine.Command(name = "nfs4j", mixinStandardHelpOptions = true, version = "0.0.1", showDefaultValues = true)
@@ -85,6 +86,16 @@ public class NfsMain implements Callable<Void> {
           defaultValue = "true")
   private boolean withV4;
 
+
+  @CommandLine.Option(
+          names = {"--pnfs"},
+          negatable = true,
+          description = "Enable pNFS",
+          showDefaultValue = CommandLine.Help.Visibility.ALWAYS,
+          defaultValue = "true")
+  private boolean withPnfs;
+
+
   @CommandLine.Option(
           names = {"--port"},
           negatable = false,
@@ -92,6 +103,14 @@ public class NfsMain implements Callable<Void> {
           showDefaultValue = CommandLine.Help.Visibility.ALWAYS,
           defaultValue = "2049")
   private int port;
+
+  @CommandLine.Option(
+          names = {"--ds-port"},
+          negatable = false,
+          description = "Specify pNFS DS port to listen on",
+          showDefaultValue = CommandLine.Help.Visibility.ALWAYS,
+          defaultValue = "2053")
+  private int dsPort;
 
   @CommandLine.Parameters(index = "0", description = "directory to export")
   private File dir;
@@ -119,13 +138,43 @@ public class NfsMain implements Callable<Void> {
       sslParameters.setNeedClientAuth(mutual);
     }
 
-    VirtualFileSystem vfs = new LocalVFS(dir);
+
+    LocalVFS vfs = new LocalVFS(dir);
+
+    NFSv41DeviceManager pnfs = null;
+
+    if (withPnfs) {
+      OncRpcSvc nfsSvc =
+          new OncRpcSvcBuilder()
+              .withPort(dsPort)
+              .withTCP()
+              .withoutAutoPublish()
+              .withWorkerThreadIoStrategy()
+              .withWorkerThreadExecutionService(Executors.newVirtualThreadPerTaskExecutor())
+              .withStartTLS()
+              .withSSLContext(sslContext)
+              .withSSLParameters(sslParameters)
+              .withServiceName("pNFS/DS@" + dsPort)
+              .build();
+
+      NFSServerV41 nfs4 =
+          new NFSServerV41.Builder()
+              .withVfs(vfs)
+              .withOperationExecutor(new EDSNFSv4OperationFactory(vfs))
+              .build();
+      nfsSvc.register(new OncRpcProgram(nfs4_prot.NFS4_PROGRAM, nfs4_prot.NFS_V4), nfs4);
+
+      nfsSvc.start();
+      pnfs = new SameNodePnfs(vfs, dsPort);
+    }
+
     OncRpcSvc nfsSvc =
         new OncRpcSvcBuilder()
             .withPort(port)
             .withTCP()
             .withAutoPublish()
             .withWorkerThreadIoStrategy()
+            .withWorkerThreadExecutionService(Executors.newVirtualThreadPerTaskExecutor())
             .withStartTLS()
             .withSSLContext(sslContext)
             .withSSLParameters(sslParameters)
@@ -140,6 +189,7 @@ public class NfsMain implements Callable<Void> {
             .withExportTable(exportFile)
             .withVfs(vfs)
             .withOperationExecutor(new MDSOperationExecutor())
+            .withDeviceManager(pnfs)
             .build();
       nfsSvc.register(new OncRpcProgram(nfs4_prot.NFS4_PROGRAM, nfs4_prot.NFS_V4), nfs4);
     }
