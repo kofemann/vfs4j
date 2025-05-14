@@ -17,6 +17,12 @@
       "locales": [
         "en-US"
       ]
+    },
+    {
+      "name": "sun.security.util.AuthResources",
+      "locales": [
+        "en-US"
+      ]
     }
   ]
 }
