@@ -1,5 +1,6 @@
 package org.dcache.vfs4j;
 
+import org.dcache.nfs.nfsstat;
 import org.dcache.nfs.v4.CompoundContext;
 import org.dcache.nfs.v4.FlexFileLayoutDriver;
 import org.dcache.nfs.v4.Layout;
@@ -25,22 +26,31 @@ import org.dcache.nfs.v4.xdr.layouttype4;
 import org.dcache.nfs.v4.xdr.length4;
 import org.dcache.nfs.v4.xdr.nfs4_prot;
 import org.dcache.nfs.v4.xdr.nfs_fh4;
+import org.dcache.nfs.v4.xdr.nfs_opnum4;
 import org.dcache.nfs.v4.xdr.offset4;
 import org.dcache.nfs.v4.xdr.stateid4;
 import org.dcache.nfs.v4.xdr.utf8str_mixed;
 import org.dcache.nfs.vfs.Inode;
+import org.dcache.nfs.vfs.Stat;
+import org.slf4j.Logger;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalLong;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static com.google.common.net.InetAddresses.toAddrString;
+import static org.slf4j.LoggerFactory.*;
+
 public class SameNodePnfs implements NFSv41DeviceManager {
+
+  private final static Logger LOGGER = getLogger(SameNodePnfs.class);
 
   public record OpenFile(clientid4 clientid, Inode inode) {}
 
@@ -137,7 +147,19 @@ public class SameNodePnfs implements NFSv41DeviceManager {
 
   @Override
   public OptionalLong layoutCommit(
-      CompoundContext compoundContext, LAYOUTCOMMIT4args layoutcommit4args) throws IOException {
+      CompoundContext context, LAYOUTCOMMIT4args args) throws IOException {
+    Inode inode = context.currentInode();
+    if (args.loca_last_write_offset.no_newoffset) {
+      Stat stat = vfs.getattr(inode);
+      long currentSize = stat.getSize();
+      long newSize = args.loca_last_write_offset.no_offset.value + 1;
+      if (newSize > currentSize) {
+        Stat newStat = new Stat();
+        newStat.setSize(newSize);
+        vfs.setattr(inode, newStat);
+        return OptionalLong.of(newSize);
+      }
+    }
     return OptionalLong.empty();
   }
 
@@ -146,8 +168,19 @@ public class SameNodePnfs implements NFSv41DeviceManager {
       throws IOException {}
 
   @Override
-  public void layoutError(CompoundContext compoundContext, LAYOUTERROR4args layouterror4args)
-      throws IOException {}
+  public void layoutError(CompoundContext context, LAYOUTERROR4args layouterror4args)
+      throws IOException {
+
+    Arrays.stream(layouterror4args.lea_errors)
+        .forEach(
+            de -> {
+              LOGGER.error(
+                  "Client {} reports error {} for op {}",
+                  toAddrString(context.getRemoteSocketAddress().getAddress()),
+                  nfsstat.toString(de.de_status),
+                  nfs_opnum4.toString(de.de_opnum));
+            });
+  }
 
   @Override
   public Set<layouttype4> getLayoutTypes() {
