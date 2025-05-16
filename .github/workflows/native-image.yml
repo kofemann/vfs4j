@@ -1,0 +1,21 @@
+name: Native image with GraalVM
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '24'
+          distribution: 'graalvm-community'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: maven
+      - name: Build with Maven
+        run: |
+          mvn package -P native
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: vfs4j-native-image
+          path: target/vfs4j
