@@ -100,7 +100,7 @@ public class SameNodePnfs implements NFSv41DeviceManager {
 
     NFS4State layoutStateId = _openToLayoutStateid.get(ioKey);
     if (layoutStateId == null) {
-      layoutStateId = client.createLayoutState(openState.getStateOwner());
+      layoutStateId = client.createState(openState.getStateOwner());
       _openToLayoutStateid.put(ioKey, layoutStateId);
     }
     layoutStateId.bumpSeqid();
