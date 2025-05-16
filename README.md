@@ -1,12 +1,38 @@
 # VFS4J
 
-An implementation of nfs4j's VirtualFileSystem interface
-which is based on Linux's open-by-handle API.
+This project implements a simple NFS (Network File System) server using the [nfs4j](https://github.com/dcache/nfs4j) library.
+It supports NFS versions 3 and 4.1, with optional pNFS (Parallel NFS) support. The server is
+backed by a local file system utilizing  Linux's `open-by-handle` API called via Java 22
+[Foreign Function and Memory API][1].
+
+:exclamation: _THIS NFS SERVER IS NOT INTENDED FOR PRODUCTION USE._ :exclamation:
+
+### Features
+
+NFSv3 and NFSv4.1 Support: Provides compatibility with both NFS versions.
+pNFS Support: Enables parallel file access for improved performance.
+TLS Support: Secure communication using RPC-over-TLS with optional mutual authentication.
+Configurable Options: Allows customization of ports, export directories, and security settings.
 
 ## Usage
 
+### Command-Line Options
 
-The vfs4j uses Java 22 [Foreign Function and Memory API][1], which requires additional JVM options.
+| Option                  | Description                                                                                     | Default Value       |
+|-------------------------|-------------------------------------------------------------------------------------------------|---------------------|
+| **--cert**              | Path to the PEM-encoded host certificate                                                       | `hostcert.pem`      |
+| **--key**               | Path to the PEM-encoded host key                                                               | `hostkey.pem`       |
+| **--ca-chain**          | Path to the trusted CA chain                                                                   | `ca-chain.pem`      |
+| **--with-tls**          | Enable RPC-over-TLS                                                                            | `false`             |
+| **--with-mutual-tls**   | Enable mutual TLS authentication                                                               | `false`             |
+| **--insecure**          | Skip TLS certificate chain verification step                                                   | `false`             |
+| **--with-v3**           | Enable NFS version 3                                                                           | `false`             |
+| **--with-v4**           | Enable NFS version 4.1                                                                         | `true`              |
+| **--pnfs**              | Enable pNFS                                                                                    | `true`              |
+| **--port**              | Specify NFS server port to listen on                                                           | `2049`              |
+| **--ds-port**           | Specify pNFS DS port to listen on                                                              | `2053`              |
+| **directory to export** | Directory to export                                                                            |                     |
+| **path to export file** | Path to the export file |
 
 ```bash
 sudo java --enable-native-access=ALL-UNNAMED \
@@ -15,6 +41,16 @@ sudo java --enable-native-access=ALL-UNNAMED \
 
 The **exports** file is compatible with the standard **/etc/exports** file format.
 
+
+## Building
+
+To build the project, you need to have [Maven](https://maven.apache.org/) and java 24 installed.
+A native image can be built with [GraalVM](https://graalvm.org) using the following command:
+
+```bash
+export JAVA_HOME=/path/to/graalvm
+mvn package -Pnative
+````
 ## How to contribute
 
 **VFS4J** uses the linux kernel model where git is not only the source repository,
