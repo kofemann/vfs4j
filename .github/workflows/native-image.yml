@@ -8,7 +8,7 @@ jobs:
       - uses: graalvm/setup-graalvm@v1
         with:
           java-version: '24'
-          distribution: 'graalvm-community'
+          distribution: 'graalvm'
           github-token: ${{ secrets.GITHUB_TOKEN }}
           cache: maven
       - name: Build with Maven
