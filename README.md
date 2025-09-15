@@ -5,7 +5,8 @@ It supports NFS versions 3 and 4.1, with optional pNFS (Parallel NFS) support. T
 backed by a local file system utilizing  Linux's `open-by-handle` API called via Java 22
 [Foreign Function and Memory API][1].
 
-:exclamation: _THIS NFS SERVER IS NOT INTENDED FOR PRODUCTION USE._ :exclamation:
+> [!WARNING]
+> THIS NFS SERVER IS NOT INTENDED FOR PRODUCTION USE.
 
 ### Features
 
