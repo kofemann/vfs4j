@@ -11,7 +11,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <java.version>24</java.version>
         <version.picocli>4.7.7</version.picocli>
-        <ssl-kickstart.version>9.1.0</ssl-kickstart.version>
+        <ayza.version>10.0.0</ayza.version>
         <nfs4j.version>0.27.0</nfs4j.version>
         <native.maven.plugin.version>0.10.6</native.maven.plugin.version>
         <graalvm.version>24.0.1</graalvm.version>
@@ -142,14 +142,14 @@
 
         <dependency>
             <groupId>io.github.hakky54</groupId>
-            <artifactId>sslcontext-kickstart</artifactId>
-            <version>${ssl-kickstart.version}</version>
+            <artifactId>ayza</artifactId>
+            <version>${ayza.version}</version>
         </dependency>
 
         <dependency>
             <groupId>io.github.hakky54</groupId>
-            <artifactId>sslcontext-kickstart-for-pem</artifactId>
-            <version>${ssl-kickstart.version}</version>
+            <artifactId>ayza-for-pem</artifactId>
+            <version>${ayza.version}</version>
         </dependency>
 
         <dependency>
