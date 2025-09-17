@@ -1,14 +1,15 @@
 package org.dcache.vfs4j;
 
-import com.google.common.io.BaseEncoding;
-
 import org.dcache.nfs.vfs.Inode;
 
 import java.util.Arrays;
+import java.util.HexFormat;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
-/** */
+/**
+ * A representation of a file handle as used by the Linux kernel.
+ */
 public class KernelFileHandle {
 
   // stolen from /usr/include/bits/fcntl-linux.h
@@ -49,9 +50,9 @@ public class KernelFileHandle {
   @Override
   public java.lang.String toString() {
     return "["
-        + BaseEncoding.base16().lowerCase().encode(handleData)
-        + "],"
-        + " len = "
-        + handleData.length;
+            + HexFormat.of().formatHex(handleData)
+            + "],"
+            + " len = "
+            + handleData.length;
   }
 }
