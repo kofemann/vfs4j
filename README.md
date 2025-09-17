@@ -45,7 +45,7 @@ The **exports** file is compatible with the standard **/etc/exports** file forma
 
 ## Building
 
-To build the project, you need to have [Maven](https://maven.apache.org/) and java 24 installed.
+To build the project, you need to have [Maven](https://maven.apache.org/) and java 24+ installed.
 A native image can be built with [GraalVM](https://graalvm.org) using the following command:
 
 ```bash
