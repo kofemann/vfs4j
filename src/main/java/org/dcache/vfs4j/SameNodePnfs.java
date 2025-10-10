@@ -1,6 +1,8 @@
 package org.dcache.vfs4j;
 
 import org.dcache.nfs.nfsstat;
+import org.dcache.nfs.status.LayoutUnavailableException;
+import org.dcache.nfs.status.UnknownLayoutTypeException;
 import org.dcache.nfs.v4.CompoundContext;
 import org.dcache.nfs.v4.FlexFileLayoutDriver;
 import org.dcache.nfs.v4.Layout;
@@ -102,6 +104,10 @@ public class SameNodePnfs implements NFSv41DeviceManager {
     final NFS4Client client = context.getSession().getClient();
     final stateid4 stateid = Stateids.getCurrentStateidIfNeeded(context, args.loga_stateid);
     final NFS4State nfsState = client.state(stateid);
+
+    if (args.loga_layout_type != layoutDriver.getLayoutType().getValue()) {
+        throw new UnknownLayoutTypeException("Layout type not supported: " + layouttype4.valueOf(args.loga_layout_type));
+    }
 
     Inode inode = context.currentInode();
 
