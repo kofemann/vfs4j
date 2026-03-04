@@ -33,6 +33,13 @@
         "en-US",
         "en_US"
       ]
+    },
+    {
+      "name": "sun.security.util.resources.auth",
+      "locales": [
+        "en-US",
+        "en_US"
+      ]
     }
   ]
 }
