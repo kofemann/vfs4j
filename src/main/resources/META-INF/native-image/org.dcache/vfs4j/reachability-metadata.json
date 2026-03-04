@@ -9,19 +9,29 @@
     {
       "name": "org.glassfish.grizzly.localization.log",
       "locales": [
-        "en-US"
+        "en-US",
+        "en_US"
       ]
     },
     {
       "name": "sun.security.util.Resources",
       "locales": [
-        "en-US"
+        "en-US",
+        "en_US"
       ]
     },
     {
       "name": "sun.security.util.AuthResources",
       "locales": [
-        "en-US"
+        "en-US",
+        "en_US"
+      ]
+    },
+    {
+      "name": "sun.security.util.resources.security",
+      "locales": [
+        "en-US",
+        "en_US"
       ]
     }
   ]
