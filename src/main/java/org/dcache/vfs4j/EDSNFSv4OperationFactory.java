@@ -81,7 +81,7 @@ public class EDSNFSv4OperationFactory extends AbstractOperationExecutor {
   private class EOperationREAD extends AbstractNFSv4Operation {
 
     private static final Logger _log =
-        LoggerFactory.getLogger(org.dcache.nfs.v4.OperationREAD.class);
+        LoggerFactory.getLogger(EOperationREAD.class);
 
     public EOperationREAD(nfs_argop4 args) {
       super(args, nfs_opnum4.OP_READ);
@@ -120,7 +120,7 @@ public class EDSNFSv4OperationFactory extends AbstractOperationExecutor {
   public class EOperationWRITE extends AbstractNFSv4Operation {
 
     private static final Logger _log =
-        LoggerFactory.getLogger(org.dcache.nfs.v4.OperationWRITE.class);
+        LoggerFactory.getLogger(EOperationWRITE.class);
 
     public EOperationWRITE(nfs_argop4 args) {
       super(args, nfs_opnum4.OP_WRITE);
