@@ -1,7 +1,6 @@
 package org.dcache.vfs4j;
 
 import org.dcache.nfs.nfsstat;
-import org.dcache.nfs.status.LayoutUnavailableException;
 import org.dcache.nfs.status.UnknownLayoutTypeException;
 import org.dcache.nfs.v4.CompoundContext;
 import org.dcache.nfs.v4.FlexFileLayoutDriver;
@@ -75,28 +74,17 @@ public class SameNodePnfs implements NFSv41DeviceManager {
     deviceid.value[0] = 0x17;
   }
 
-  private final InetSocketAddress[] localAddresses;
-
   /**
+   * pNFS layout type specific device address.
    */
-  private device_addr4 deviceAddress;
-
+  private final device_addr4 deviceAddress;
 
   private final LocalVFS vfs;
 
   public SameNodePnfs(LocalVFS vfs, int port) throws IOException {
     this.vfs = vfs;
-    localAddresses = getLocalAddresses(port);
-    deviceAddress = layoutDriver.getDeviceAddress(localAddresses);
-
-    startDS(port);
+    deviceAddress = layoutDriver.getDeviceAddress(getLocalAddresses(port));
   }
-
-
-  private void startDS(int port) throws IOException {
-
-  }
-
 
   @Override
   public Layout layoutGet(CompoundContext context, LAYOUTGET4args args) throws IOException {
