@@ -16,11 +16,13 @@ import java.lang.foreign.GroupLayout;
 import java.lang.foreign.Linker;
 import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
+import java.lang.foreign.SequenceLayout;
 import java.lang.foreign.SymbolLookup;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.VarHandle;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -83,6 +85,11 @@ public class LocalVFS implements VirtualFileSystem {
   private static final int AT_SYMLINK_NOFOLLOW = 0x100;
   private static final int AT_REMOVEDIR = 0x200;
   private static final int AT_EMPTY_PATH = 0x1000;
+
+  /**
+   * Special value for utimensat() to indicate that the caller does not want to change the corresponding time field.
+   */
+  private static final long UTIME_OMIT = ((1L << 30) - 2L);
 
   private final KernelFileHandle rootFh;
   protected final int rootFd;
@@ -211,6 +218,19 @@ public class LocalVFS implements VirtualFileSystem {
   private static final VarHandle VH_DIRENT_TYPE = DIRENT_LAYOUT.varHandle(groupElement("type"));
   // private static final VarHandle VH_DIRENT_NAME = DIRENT_LAYOUT.varHandle(groupElement("name"), sequenceElement());
 
+  private static final SequenceLayout TIMESPEC_LAYOUT = MemoryLayout.sequenceLayout(2,
+        MemoryLayout.structLayout(
+              JAVA_LONG.withName("tv_sec"),
+              JAVA_LONG.withName("tv_nsec")
+        ).withName("timespec")
+  );
+
+  static final VarHandle VH_TIMESPEC_LAYOUT_SEC
+        = TIMESPEC_LAYOUT.varHandle(PathElement.sequenceElement(), PathElement.groupElement("tv_sec"));
+
+  static final VarHandle VH_TIMESPEC_LAYOUT_NSEC
+        = TIMESPEC_LAYOUT.varHandle(PathElement.sequenceElement(), PathElement.groupElement("tv_nsec"));
+
   // handles to native functions;
   private static final MethodHandle fStrerror;
   private static final MethodHandle fOpen;
@@ -247,6 +267,8 @@ public class LocalVFS implements VirtualFileSystem {
   private static final MethodHandle fErrono;
 
   private static final MethodHandle fGetdents;
+
+  private static final MethodHandle fFutimens;
 
   private static final Linker LINKER = Linker.nativeLinker();
   private static final SymbolLookup STDLIB = LINKER.defaultLookup();
@@ -420,6 +442,11 @@ public class LocalVFS implements VirtualFileSystem {
     fGetdents  = LINKER.downcallHandle(
             STDLIB.find("getdents64").orElseThrow(() -> new NoSuchElementException("getdents64")),
             FunctionDescriptor.of(JAVA_LONG, JAVA_INT, ADDRESS, JAVA_LONG)
+    );
+
+    fFutimens  = LINKER.downcallHandle(
+          STDLIB.find("futimens").orElseThrow(() -> new NoSuchElementException("futimens")),
+          FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS)
     );
   }
 
@@ -914,6 +941,33 @@ public class LocalVFS implements VirtualFileSystem {
         rc = (int)fFtruncate.invokeExact(fd.fd(), stat.getSize());
         checkError(rc == 0);
       }
+
+      if (stat.isDefined(Stat.StatAttribute.ATIME) || stat.isDefined(Stat.StatAttribute.MTIME)) {
+        var times = arena.allocate(TIMESPEC_LAYOUT);
+        if (stat.isDefined(Stat.StatAttribute.ATIME)) {
+          Instant atime = Instant.ofEpochMilli(stat.getATime());
+          VH_TIMESPEC_LAYOUT_SEC.set(times, 0L, 0L, atime.getEpochSecond());
+          VH_TIMESPEC_LAYOUT_NSEC.set(times, 0L, 0L, atime.getNano());
+        } else {
+          // atime is not set
+          VH_TIMESPEC_LAYOUT_SEC.set(times, 0L, 0L, 0L);
+          VH_TIMESPEC_LAYOUT_NSEC.set(times, 0L, 0L, UTIME_OMIT);
+        }
+
+        if (stat.isDefined(Stat.StatAttribute.MTIME)) {
+          Instant mtime = Instant.ofEpochMilli(stat.getMTime());
+          VH_TIMESPEC_LAYOUT_SEC.set(times, 0L, 1L, mtime.getEpochSecond());
+          VH_TIMESPEC_LAYOUT_NSEC.set(times, 0L, 1L, mtime.getNano());
+        } else {
+          // if mtime is not set
+          VH_TIMESPEC_LAYOUT_SEC.set(times, 0L, 1L, 0L);
+          VH_TIMESPEC_LAYOUT_NSEC.set(times, 0L, 1L, UTIME_OMIT);
+        }
+
+        rc = (int) fFutimens.invokeExact(fd.fd(), times);
+        checkError(rc == 0);
+      }
+
     } catch (Throwable t) {
       Throwables.throwIfInstanceOf(t, IOException.class);
       throw new RuntimeException(t);
