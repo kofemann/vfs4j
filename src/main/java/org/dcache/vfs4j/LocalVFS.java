@@ -7,6 +7,7 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.cache.RemovalListener;
 import com.google.common.cache.RemovalNotification;
 
+import jakarta.annotation.Nonnull;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
@@ -31,7 +32,6 @@ import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
-import javax.annotation.Nonnull;
 import javax.security.auth.Subject;
 
 import org.dcache.nfs.status.*;
@@ -1236,6 +1236,8 @@ public class LocalVFS implements VirtualFileSystem {
       case ENOSPC -> throw new NoSpcException(msg);
       case EPERM -> throw new PermException(msg);
       case ENAMETOOLONG -> throw new NameTooLongException(msg);
+      case ELOOP -> throw new MLinkException(msg);
+      case EBADF -> throw new StaleException(msg);
       default -> {
         IOException t = new ServerFaultException(msg);
         LOG.error("Unhandled POSIX error {} : {}", e,  msg);
@@ -1335,7 +1337,8 @@ public class LocalVFS implements VirtualFileSystem {
   private class FileOpenner extends CacheLoader<KernelFileHandle, SystemFd> {
 
     @Override
-    public SystemFd load(@Nonnull KernelFileHandle key) throws Exception {
+    @Nonnull
+    public SystemFd load(KernelFileHandle key) throws Exception {
       return inode2fd(key, O_NOFOLLOW | O_RDWR);
     }
   }
@@ -1343,7 +1346,8 @@ public class LocalVFS implements VirtualFileSystem {
   private class DirOpenner extends CacheLoader<KernelFileHandle, SystemFd> {
 
     @Override
-    public SystemFd load(@Nonnull KernelFileHandle key) throws Exception {
+    @Nonnull
+    public SystemFd load(KernelFileHandle key) throws Exception {
       return inode2fd(key, O_NOFOLLOW | O_DIRECTORY);
     }
   }
