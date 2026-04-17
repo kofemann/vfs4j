@@ -81,10 +81,13 @@ public class LocalVFS implements VirtualFileSystem {
   private static final int O_NOFOLLOW = 0400000;
   private static final int O_EXCL = 0200;
   private static final int O_CREAT = 0100;
+  private static final int O_NONBLOCK = 04000;
+
 
   private static final int AT_SYMLINK_NOFOLLOW = 0x100;
   private static final int AT_REMOVEDIR = 0x200;
   private static final int AT_EMPTY_PATH = 0x1000;
+  private static final int AT_HANDLE_FID = 0x200;
 
   /**
    * Special value for utimensat() to indicate that the caller does not want to change the corresponding time field.
@@ -903,6 +906,10 @@ public class LocalVFS implements VirtualFileSystem {
         throw new InvalException("Can't change size of a symlink");
       }
       openMode = O_PATH | O_RDWR | O_NOFOLLOW;
+    }
+
+    if (currentStat.type() == Stat.Type.FIFO) {
+      openMode |= O_NONBLOCK | AT_HANDLE_FID;
     }
 
     if (stat.isDefined(Stat.StatAttribute.SIZE)) {
