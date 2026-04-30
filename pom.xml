@@ -12,7 +12,7 @@
         <java.version>25</java.version>
         <version.picocli>4.7.7</version.picocli>
         <ayza.version>10.0.0</ayza.version>
-        <nfs4j.version>0.27.0</nfs4j.version>
+        <nfs4j.version>0.27.2</nfs4j.version>
         <native.maven.plugin.version>0.10.6</native.maven.plugin.version>
         <graalvm.version>25.0.0</graalvm.version>
         <slf4j.version>2.0.17</slf4j.version>
