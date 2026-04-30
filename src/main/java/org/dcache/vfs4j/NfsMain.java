@@ -127,8 +127,52 @@ public class NfsMain implements Callable<Void> {
     ).execute(args);
   }
 
+  private void validateArguments() {
+    if (dir == null) {
+      throw new CommandLine.ParameterException(
+          new CommandLine(this),
+          "Directory to export is required");
+    }
+    if (!dir.exists()) {
+      throw new CommandLine.ParameterException(
+          new CommandLine(this),
+          "Directory does not exist: " + dir.getAbsolutePath());
+    }
+    if (!dir.isDirectory()) {
+      throw new CommandLine.ParameterException(
+          new CommandLine(this),
+          "Path is not a directory: " + dir.getAbsolutePath());
+    }
+    if (export == null) {
+      throw new CommandLine.ParameterException(
+          new CommandLine(this),
+          "Export file path is required");
+    }
+    if (port < 1 || port > 65535) {
+      throw new CommandLine.ParameterException(
+          new CommandLine(this),
+          "Port must be between 1 and 65535: " + port);
+    }
+    if (dsPort < 1 || dsPort > 65535) {
+      throw new CommandLine.ParameterException(
+          new CommandLine(this),
+          "DS port must be between 1 and 65535: " + dsPort);
+    }
+    if (tls && (cert == null || cert.isEmpty() || key == null || key.isEmpty())) {
+      throw new CommandLine.ParameterException(
+          new CommandLine(this),
+          "TLS enabled but certificate or key is not specified");
+    }
+    if (withPnfs && !withV4) {
+      throw new CommandLine.ParameterException(
+          new CommandLine(this),
+          "pNFS requires NFS v4 to be enabled");
+    }
+  }
+
   @Override
   public Void call() throws Exception {
+    validateArguments();
 
     SSLParameters sslParameters = null;
     SSLContext sslContext = null;
