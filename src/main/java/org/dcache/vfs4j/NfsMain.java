@@ -34,89 +34,103 @@ public class NfsMain implements Callable<Void> {
 
   private final static Logger LOGGER = org.slf4j.LoggerFactory.getLogger(NfsMain.class);
 
-  @CommandLine.Option(
-      names = {"--cert"},
-      description = "PEM encoded host certificate",
-      defaultValue = "hostcert.pem")
-  private String cert;
+  @CommandLine.ArgGroup(exclusive = false, heading = "%nTLS Options:%n")
+  TlsOptions tlsOptions = new TlsOptions();
 
-  @CommandLine.Option(
-      names = {"--key"},
-      description = "PEM encoded host key",
-      defaultValue = "hostkey.pem")
-  private String key;
+  @CommandLine.ArgGroup(exclusive = false, heading = "%nNFS Version Options:%n")
+  NfsVersionOptions nfsVersionOptions = new NfsVersionOptions();
 
-  @CommandLine.Option(
-      names = "--ca-chain",
-      description = "Trusted CA chain",
-      defaultValue = "ca-chain.pem")
-  private String chain;
-
-  @CommandLine.Option(
-      names = {"--with-tls"},
-      description = "Enable RPC-over-TLS",
-      defaultValue = "false")
-  private boolean tls;
-
-  @CommandLine.Option(
-          names = {"--with-mutual-tls"},
-          description = "Enable mutual TLS authentication",
-          defaultValue = "false")
-  private boolean mutual;
-
-    @CommandLine.Option(
-            names = {"--insecure"},
-            description = "Skip TLS certificate chain verification step",
-            defaultValue = "false")
-    private boolean insecure;
-
-  @CommandLine.Option(
-          names = {"--with-v3"},
-          negatable = true,
-          description = "Enable NFS version 3",
-          showDefaultValue = CommandLine.Help.Visibility.ALWAYS,
-          defaultValue = "false")
-  private boolean withV3;
-
-  @CommandLine.Option(
-          names = {"--with-v4"},
-          negatable = true,
-          description = "Enable NFS version 4.1",
-          showDefaultValue = CommandLine.Help.Visibility.ALWAYS,
-          defaultValue = "true")
-  private boolean withV4;
-
-
-  @CommandLine.Option(
-          names = {"--pnfs"},
-          negatable = true,
-          description = "Enable pNFS",
-          showDefaultValue = CommandLine.Help.Visibility.ALWAYS,
-          defaultValue = "true")
-  private boolean withPnfs;
-
-
-  @CommandLine.Option(
-          names = {"--port"},
-          negatable = false,
-          description = "Specify NFS server port to listen on",
-          showDefaultValue = CommandLine.Help.Visibility.ALWAYS,
-          defaultValue = "2049")
-  private int port;
-
-  @CommandLine.Option(
-          names = {"--ds-port"},
-          negatable = false,
-          description = "Specify pNFS DS port to listen on",
-          showDefaultValue = CommandLine.Help.Visibility.ALWAYS,
-          defaultValue = "2053")
-  private int dsPort;
+  @CommandLine.ArgGroup(exclusive = false, heading = "%npNFS Options:%n")
+  PnfsOptions pnfsOptions = new PnfsOptions();
 
   @CommandLine.Parameters(index = "0", description = "directory to export")
   private File dir;
 
   @CommandLine.Parameters(index = "1", description = "path to export file")
   private File export;
+
+  static class TlsOptions {
+
+    @CommandLine.Option(
+        names = {"--with-tls"},
+        description = "Enable RPC-over-TLS",
+        defaultValue = "false")
+    boolean tls;
+
+    @CommandLine.Option(
+        names = {"--cert"},
+        description = "PEM encoded host certificate",
+        defaultValue = "hostcert.pem")
+    String cert;
+
+    @CommandLine.Option(
+        names = {"--key"},
+        description = "PEM encoded host key",
+        defaultValue = "hostkey.pem")
+    String key;
+
+    @CommandLine.Option(
+        names = "--ca-chain",
+        description = "Trusted CA chain",
+        defaultValue = "ca-chain.pem")
+    String chain;
+
+    @CommandLine.Option(
+        names = {"--with-mutual-tls"},
+        description = "Enable mutual TLS authentication",
+        defaultValue = "false")
+    boolean mutual;
+
+    @CommandLine.Option(
+        names = {"--insecure"},
+        description = "Skip TLS certificate chain verification step",
+        defaultValue = "false")
+    boolean insecure;
+  }
+
+  static class NfsVersionOptions {
+    @CommandLine.Option(
+        names = {"--with-v3"},
+        negatable = true,
+        description = "Enable NFS version 3",
+        showDefaultValue = CommandLine.Help.Visibility.ALWAYS,
+        defaultValue = "false")
+    boolean withV3;
+
+    @CommandLine.Option(
+        names = {"--with-v4"},
+        negatable = true,
+        description = "Enable NFS version 4.1",
+        showDefaultValue = CommandLine.Help.Visibility.ALWAYS,
+        defaultValue = "true")
+    boolean withV4;
+
+    @CommandLine.Option(
+        names = {"--port"},
+        description = "Specify NFS server port to listen on",
+        showDefaultValue = CommandLine.Help.Visibility.ALWAYS,
+        defaultValue = "2049")
+    int port = 2049;
+
+  }
+
+  static class PnfsOptions {
+
+    @CommandLine.Option(
+        names = {"--pnfs"},
+        negatable = true,
+        description = "Enable pNFS",
+        showDefaultValue = CommandLine.Help.Visibility.ALWAYS,
+        defaultValue = "true")
+    boolean withPnfs;
+
+    @CommandLine.Option(
+        names = {"--ds-port"},
+        description = "Specify pNFS DS port to listen on",
+        showDefaultValue = CommandLine.Help.Visibility.ALWAYS,
+        defaultValue = "2053")
+    int dsPort = 2053;
+  }
 
   public static void main(String[] args) throws Exception {
     new CommandLine(new NfsMain()).setNegatableOptionTransformer(
@@ -148,22 +162,22 @@ public class NfsMain implements Callable<Void> {
           new CommandLine(this),
           "Export file path is required");
     }
-    if (port < 1 || port > 65535) {
+    if (nfsVersionOptions.port < 1 || nfsVersionOptions.port > 65535) {
       throw new CommandLine.ParameterException(
           new CommandLine(this),
-          "Port must be between 1 and 65535: " + port);
+          "Port must be between 1 and 65535: " + nfsVersionOptions.port);
     }
-    if (dsPort < 1 || dsPort > 65535) {
+    if (pnfsOptions.dsPort < 1 || pnfsOptions.dsPort > 65535) {
       throw new CommandLine.ParameterException(
           new CommandLine(this),
-          "DS port must be between 1 and 65535: " + dsPort);
+          "DS port must be between 1 and 65535: " + pnfsOptions.dsPort);
     }
-    if (tls && (cert == null || cert.isEmpty() || key == null || key.isEmpty())) {
+    if (tlsOptions.tls && (tlsOptions.cert == null || tlsOptions.cert.isEmpty() || tlsOptions.key == null || tlsOptions.key.isEmpty())) {
       throw new CommandLine.ParameterException(
           new CommandLine(this),
           "TLS enabled but certificate or key is not specified");
     }
-    if (withPnfs && !withV4) {
+    if (pnfsOptions.withPnfs && !nfsVersionOptions.withV4) {
       throw new CommandLine.ParameterException(
           new CommandLine(this),
           "pNFS requires NFS v4 to be enabled");
@@ -176,10 +190,10 @@ public class NfsMain implements Callable<Void> {
 
     SSLParameters sslParameters = null;
     SSLContext sslContext = null;
-    if (tls) {
-      sslContext = TLSUtils.createSslContext(cert, key, new char[0], chain, insecure);
+    if (tlsOptions.tls) {
+      sslContext = TLSUtils.createSslContext(tlsOptions.cert, tlsOptions.key, new char[0], tlsOptions.chain, tlsOptions.insecure);
       sslParameters = sslContext.getDefaultSSLParameters();
-      sslParameters.setNeedClientAuth(mutual);
+      sslParameters.setNeedClientAuth(tlsOptions.mutual);
     }
 
 
@@ -187,10 +201,10 @@ public class NfsMain implements Callable<Void> {
 
     NFSv41DeviceManager pnfs = null;
 
-    if (withPnfs) {
+    if (pnfsOptions.withPnfs) {
       OncRpcSvc nfsSvc =
           new OncRpcSvcBuilder()
-              .withPort(dsPort)
+              .withPort(pnfsOptions.dsPort)
               .withTCP()
               .withoutAutoPublish()
               .withWorkerThreadIoStrategy()
@@ -198,7 +212,7 @@ public class NfsMain implements Callable<Void> {
               .withStartTLS()
               .withSSLContext(sslContext)
               .withSSLParameters(sslParameters)
-              .withServiceName("pNFS/DS@" + dsPort)
+              .withServiceName("pNFS/DS@" + pnfsOptions.dsPort)
               .build();
 
       NFSServerV41 nfs4 =
@@ -209,12 +223,12 @@ public class NfsMain implements Callable<Void> {
       nfsSvc.register(new OncRpcProgram(nfs4_prot.NFS4_PROGRAM, nfs4_prot.NFS_V4), nfs4);
 
       nfsSvc.start();
-      pnfs = new SameNodePnfs(vfs, dsPort);
+      pnfs = new SameNodePnfs(vfs, pnfsOptions.dsPort);
     }
 
     OncRpcSvc nfsSvc =
         new OncRpcSvcBuilder()
-            .withPort(port)
+            .withPort(nfsVersionOptions.port)
             .withTCP()
             .withAutoPublish()
             .withWorkerThreadIoStrategy()
@@ -222,12 +236,12 @@ public class NfsMain implements Callable<Void> {
             .withStartTLS()
             .withSSLContext(sslContext)
             .withSSLParameters(sslParameters)
-            .withServiceName("nfsd@" + port)
+            .withServiceName("nfsd@" + nfsVersionOptions.port)
             .build();
 
     ExportTable exportFile = new ExportFile(export);
 
-    if (withV4) {
+    if (nfsVersionOptions.withV4) {
       NFSServerV41 nfs4 =
         new NFSServerV41.Builder()
             .withExportTable(exportFile)
@@ -238,7 +252,7 @@ public class NfsMain implements Callable<Void> {
       nfsSvc.register(new OncRpcProgram(nfs4_prot.NFS4_PROGRAM, nfs4_prot.NFS_V4), nfs4);
     }
 
-    if (withV3) {
+    if (nfsVersionOptions.withV3) {
       NfsServerV3 nfs3 = new NfsServerV3(exportFile, vfs);
       MountServer mountd = new MountServer(exportFile, vfs);
       nfsSvc.register(new OncRpcProgram(100003, 3), nfs3);
