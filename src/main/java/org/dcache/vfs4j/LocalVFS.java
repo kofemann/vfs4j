@@ -27,7 +27,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -279,176 +278,173 @@ public class LocalVFS implements VirtualFileSystem {
   static {
 
     // The Foreign Function & Memory API
-    // https://bugs.openjdk.org/browse/JDK-8282048
 
     // magic function that return pointer to errno variable
     fErrono = LINKER.downcallHandle(
-            STDLIB.find("__errno_location").orElseThrow(() -> new NoSuchElementException("__errno_location")),
-                    FunctionDescriptor.of(ADDRESS)
-            );
+          STDLIB.findOrThrow("__errno_location"),
+          FunctionDescriptor.of(ADDRESS));
 
     fStrerror = LINKER.downcallHandle(
-            STDLIB.find("strerror").orElseThrow(() -> new NoSuchElementException("strerror")),
-                    FunctionDescriptor.of(ADDRESS, JAVA_INT)
-            );
+          STDLIB.findOrThrow("strerror"),
+          FunctionDescriptor.of(ADDRESS, JAVA_INT));
 
     fOpen = LINKER.downcallHandle(
-            STDLIB.find("open").orElseThrow(() -> new NoSuchElementException("open")),
-                    FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT)
-            );
+          STDLIB.findOrThrow("open"),
+          FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT)
+    );
 
     fOpenAt = LINKER.downcallHandle(
-            STDLIB.find("openat").orElseThrow(() -> new NoSuchElementException("openat")),
-                    FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT)
-            );
+          STDLIB.findOrThrow("openat"),
+          FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT)
+    );
 
     fClose = LINKER.downcallHandle(
-            STDLIB.find("close").orElseThrow(() -> new NoSuchElementException("close")),
-                    FunctionDescriptor.of(JAVA_INT, JAVA_INT)
-            );
+          STDLIB.findOrThrow("close"),
+          FunctionDescriptor.of(JAVA_INT, JAVA_INT)
+    );
 
     fNameToHandleAt = LINKER.downcallHandle(
-            STDLIB.find("name_to_handle_at").orElseThrow(() -> new NoSuchElementException("name_to_handle_at")),
-                    FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, ADDRESS, ADDRESS, JAVA_INT)
-            );
+          STDLIB.findOrThrow("name_to_handle_at"),
+          FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, ADDRESS, ADDRESS, JAVA_INT)
+    );
 
     fOpenByHandleAt = LINKER.downcallHandle(
-            STDLIB.find("open_by_handle_at").orElseThrow(() -> new NoSuchElementException("open_by_handle_at")),
-                    FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT)
-            );
+          STDLIB.findOrThrow("open_by_handle_at"),
+          FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT)
+    );
 
     fDataSync = LINKER.downcallHandle(
-            STDLIB.find("fdatasync").orElseThrow(() -> new NoSuchElementException("fdatasync")),
-                    FunctionDescriptor.of(JAVA_INT, JAVA_INT)
-            );
+          STDLIB.findOrThrow("fdatasync"),
+          FunctionDescriptor.of(JAVA_INT, JAVA_INT)
+    );
 
     fSync = LINKER.downcallHandle(
-            STDLIB.find("fsync").orElseThrow(() -> new NoSuchElementException("fsync")),
-                    FunctionDescriptor.of(JAVA_INT, JAVA_INT)
-            );
+          STDLIB.findOrThrow("fsync"),
+          FunctionDescriptor.of(JAVA_INT, JAVA_INT)
+    );
 
     fStatx = LINKER.downcallHandle(
-            STDLIB.find("statx").orElseThrow(() -> new NoSuchElementException("statx")),
-                    FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT, ADDRESS)
-            );
+          STDLIB.findOrThrow("statx"),
+          FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT, ADDRESS)
+    );
 
     fStatFs = LINKER.downcallHandle(
-            STDLIB.find("fstatfs").orElseThrow(() -> new NoSuchElementException("fstatfs")),
-                    FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS)
-            );
+          STDLIB.findOrThrow("fstatfs"),
+          FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS)
+    );
 
     fUnlinkAt = LINKER.downcallHandle(
-            STDLIB.find("unlinkat").orElseThrow(() -> new NoSuchElementException("unlinkat")),
-                    FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT)
-            );
+          STDLIB.findOrThrow("unlinkat"),
+          FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT)
+    );
 
     fOpendir = LINKER.downcallHandle(
-            STDLIB.find("fdopendir").orElseThrow(() -> new NoSuchElementException("fdopendir")),
-                    FunctionDescriptor.of(ADDRESS, JAVA_INT)
-            );
+          STDLIB.findOrThrow("fdopendir"),
+          FunctionDescriptor.of(ADDRESS, JAVA_INT)
+    );
 
     fReaddir = LINKER.downcallHandle(
-            STDLIB.find("readdir").orElseThrow(() -> new NoSuchElementException("readdir")),
-                    FunctionDescriptor.of(ADDRESS, ADDRESS)
-            );
+          STDLIB.findOrThrow("readdir"),
+          FunctionDescriptor.of(ADDRESS, ADDRESS)
+    );
 
     fSeekdir = LINKER.downcallHandle(
-            STDLIB.find("seekdir").orElseThrow(() -> new NoSuchElementException("seekdir")),
-                    FunctionDescriptor.ofVoid(ADDRESS, JAVA_LONG)
-            );
+          STDLIB.findOrThrow("seekdir"),
+          FunctionDescriptor.ofVoid(ADDRESS, JAVA_LONG)
+    );
 
     fPread = LINKER.downcallHandle(
-            STDLIB.find("pread").orElseThrow(() -> new NoSuchElementException("pread")),
-                    FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, JAVA_LONG)
-            );
+          STDLIB.findOrThrow("pread"),
+          FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, JAVA_LONG)
+    );
 
     fPwrite = LINKER.downcallHandle(
-            STDLIB.find("pwrite").orElseThrow(() -> new NoSuchElementException("pwrite")),
-            FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, JAVA_LONG)
+          STDLIB.findOrThrow("pwrite"),
+          FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, JAVA_LONG)
     );
 
     fSymlinkAt = LINKER.downcallHandle(
-            STDLIB.find("symlinkat").orElseThrow(() -> new NoSuchElementException("symlinkat")),
-                    FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT, ADDRESS)
-            );
+          STDLIB.findOrThrow("symlinkat"),
+          FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT, ADDRESS)
+    );
 
     fRenameAt = LINKER.downcallHandle(
-            STDLIB.find("renameat").orElseThrow(() -> new NoSuchElementException("renameat")),
-                    FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, ADDRESS)
-            );
+          STDLIB.findOrThrow("renameat"),
+          FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, ADDRESS)
+    );
 
     fReadlinkAt = LINKER.downcallHandle(
-            STDLIB.find("readlinkat").orElseThrow(() -> new NoSuchElementException("readlinkat")),
-            FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, ADDRESS, JAVA_INT)
+          STDLIB.findOrThrow("readlinkat"),
+          FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, ADDRESS, JAVA_INT)
     );
 
     fChownAt = LINKER.downcallHandle(
-            STDLIB.find("fchownat").orElseThrow(() -> new NoSuchElementException("fchownat")),
-            FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT, JAVA_INT)
+          STDLIB.findOrThrow("fchownat"),
+          FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT, JAVA_INT)
     );
 
     fMkdirAt = LINKER.downcallHandle(
-            STDLIB.find("mkdirat").orElseThrow(() -> new NoSuchElementException("mkdirat")),
-            FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT)
+          STDLIB.findOrThrow("mkdirat"),
+          FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT)
     );
 
     fChmod = LINKER.downcallHandle(
-            STDLIB.find("fchmod").orElseThrow(() -> new NoSuchElementException("fchmod")),
-            FunctionDescriptor.of(JAVA_INT, JAVA_INT, JAVA_INT)
+          STDLIB.findOrThrow("fchmod"),
+          FunctionDescriptor.of(JAVA_INT, JAVA_INT, JAVA_INT)
     );
 
     fFtruncate = LINKER.downcallHandle(
-            STDLIB.find("ftruncate").orElseThrow(() -> new NoSuchElementException("ftruncate")),
-            FunctionDescriptor.of(JAVA_INT, JAVA_INT, JAVA_LONG)
+          STDLIB.findOrThrow("ftruncate"),
+          FunctionDescriptor.of(JAVA_INT, JAVA_INT, JAVA_LONG)
     );
 
     fLinkAt = LINKER.downcallHandle(
-            STDLIB.find("linkat").orElseThrow(() -> new NoSuchElementException("linkat")),
-            FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, ADDRESS, JAVA_INT)
+          STDLIB.findOrThrow("linkat"),
+          FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, ADDRESS, JAVA_INT)
     );
 
     fCopyFileRange = LINKER.downcallHandle(
-            STDLIB.find("copy_file_range").orElseThrow(() -> new NoSuchElementException("copy_file_range")),
-            FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, ADDRESS, JAVA_LONG, JAVA_INT)
+          STDLIB.findOrThrow("copy_file_range"),
+          FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, ADDRESS, JAVA_LONG, JAVA_INT)
     );
 
-    fListxattr  = LINKER.downcallHandle(
-            STDLIB.find("flistxattr").orElseThrow(() -> new NoSuchElementException("flistxattr")),
-            FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT)
+    fListxattr = LINKER.downcallHandle(
+          STDLIB.findOrThrow("flistxattr"),
+          FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT)
     );
 
-    fGetxattr  = LINKER.downcallHandle(
-            STDLIB.find("fgetxattr").orElseThrow(() -> new NoSuchElementException("fgetxattr")),
-            FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, ADDRESS, JAVA_INT)
+    fGetxattr = LINKER.downcallHandle(
+          STDLIB.findOrThrow("fgetxattr"),
+          FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, ADDRESS, JAVA_INT)
     );
 
-    fSetxattr  = LINKER.downcallHandle(
-            STDLIB.find("fsetxattr").orElseThrow(() -> new NoSuchElementException("fsetxattr")),
-            FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, ADDRESS, JAVA_INT, JAVA_INT)
+    fSetxattr = LINKER.downcallHandle(
+          STDLIB.findOrThrow("fsetxattr"),
+          FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS, ADDRESS, JAVA_INT, JAVA_INT)
     );
 
-    fRemovexattr  = LINKER.downcallHandle(
-            STDLIB.find("fremovexattr").orElseThrow(() -> new NoSuchElementException("fremovexattr")),
-            FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS)
+    fRemovexattr = LINKER.downcallHandle(
+          STDLIB.findOrThrow("fremovexattr"),
+          FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS)
     );
 
     fMknodeAt = LINKER.downcallHandle(
-            STDLIB.find("__xmknodat").orElseThrow(() -> new NoSuchElementException("__xmknodat")),
-            FunctionDescriptor.of(JAVA_INT, JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, ADDRESS)
+          STDLIB.findOrThrow("__xmknodat"),
+          FunctionDescriptor.of(JAVA_INT, JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT, ADDRESS)
     );
 
-    fIoctl  = LINKER.downcallHandle(
-            STDLIB.find("ioctl").orElseThrow(() -> new NoSuchElementException("ioctl")),
-            FunctionDescriptor.of(JAVA_INT, JAVA_INT, JAVA_INT, ADDRESS)
+    fIoctl = LINKER.downcallHandle(
+          STDLIB.findOrThrow("ioctl"),
+          FunctionDescriptor.of(JAVA_INT, JAVA_INT, JAVA_INT, ADDRESS)
     );
 
-    fGetdents  = LINKER.downcallHandle(
-            STDLIB.find("getdents64").orElseThrow(() -> new NoSuchElementException("getdents64")),
-            FunctionDescriptor.of(JAVA_LONG, JAVA_INT, ADDRESS, JAVA_LONG)
+    fGetdents = LINKER.downcallHandle(
+          STDLIB.findOrThrow("getdents64"),
+          FunctionDescriptor.of(JAVA_LONG, JAVA_INT, ADDRESS, JAVA_LONG)
     );
 
-    fFutimens  = LINKER.downcallHandle(
-          STDLIB.find("futimens").orElseThrow(() -> new NoSuchElementException("futimens")),
+    fFutimens = LINKER.downcallHandle(
+          STDLIB.findOrThrow("futimens"),
           FunctionDescriptor.of(JAVA_INT, JAVA_INT, ADDRESS)
     );
   }
