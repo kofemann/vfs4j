@@ -173,13 +173,6 @@
         </dependency>
     </dependencies>
 
-    <repositories>
-        <repository>
-            <id>dcache.repository</id>
-            <url>https://download.dcache.org/nexus/content/groups/public</url>
-        </repository>
-    </repositories>
-    
     <profiles>
         <profile>
             <id>native</id>
